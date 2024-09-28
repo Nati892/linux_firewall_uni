@@ -22,32 +22,57 @@ typedef struct
     int priority; // priority of callback function
 } nf_hook_ops;
 
+// ip filter
 unsigned int nf_in_callback(void *priv,
                             struct sk_buff *skb,
                             const struct nf_hook_state *state);
 
+// full blocker
 unsigned int nf_in_callback_dropper(void *priv,
-                            struct sk_buff *skb,
-                            const struct nf_hook_state *state);
+                                    struct sk_buff *skb,
+                                    const struct nf_hook_state *state);
+
+// full informer local_in
+unsigned int nf_in_callback_informer(void *priv,
+                                     struct sk_buff *skb,
+                                     const struct nf_hook_state *state);
+
+// full informer local_in
+unsigned int nf_pre_routing_callback_informer(void *priv,
+                                              struct sk_buff *skb,
+                                              const struct nf_hook_state *state);
 
 unsigned int nf_out_hook(void *priv,
                          struct sk_buff *skb,
                          const struct nf_hook_state *state);
 
 static struct nf_hook_ops *nf_init_block_ops = NULL;
+static struct nf_hook_ops *nf_pre_route_block_ops = NULL;
 static int __init hello_init(void)
 {
     nf_init_block_ops = (struct nf_hook_ops *)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
+    nf_pre_route_block_ops = (struct nf_hook_ops *)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
+
     if (nf_init_block_ops != NULL)
     {
-        nf_init_block_ops->hook = (nf_hookfn *)nf_in_callback;
+        nf_init_block_ops->hook = (nf_hookfn *)nf_in_callback_informer;
         nf_init_block_ops->hooknum = NF_INET_LOCAL_IN;
         nf_init_block_ops->pf = NFPROTO_IPV4;
         nf_init_block_ops->priority = NF_IP_PRI_LAST; // set the priority
 
         nf_register_net_hook(&init_net, nf_init_block_ops);
     }
-    printk(KERN_INFO "firemode: Hello, world\n");
+
+    if (nf_pre_route_block_ops != NULL)
+    {
+        nf_pre_route_block_ops->hook = (nf_hookfn *)nf_pre_routing_callback_informer;
+        nf_pre_route_block_ops->hooknum = NF_INET_PRE_ROUTING;
+        nf_pre_route_block_ops->pf = NFPROTO_IPV4;
+        nf_pre_route_block_ops->priority = NF_IP_PRI_LAST; // set the priority
+
+        nf_register_net_hook(&init_net, nf_pre_route_block_ops);
+    }
+    printk(KERN_INFO "firemod: Hello, world\n");
     return 0;
 }
 
@@ -58,6 +83,13 @@ static void __exit hello_exit(void)
         nf_unregister_net_hook(&init_net, nf_init_block_ops);
         kfree(nf_init_block_ops);
     }
+
+    if (nf_pre_route_block_ops != NULL)
+    {
+        nf_unregister_net_hook(&init_net, nf_pre_route_block_ops);
+        kfree(nf_pre_route_block_ops);
+    }
+
     printk(KERN_INFO "firemod:Goodbye, world\n");
 }
 
@@ -94,27 +126,27 @@ unsigned int nf_in_callback(void *priv,
 
         if (iph->saddr != specific_ip)
         {
-            printk(KERN_INFO "firemode: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            printk(KERN_INFO "firemod: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
         else
         {
-            printk(KERN_INFO "firemode: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            printk(KERN_INFO "firemod: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         }
         if (tcph->dest == 1234)
         {
-            printk(KERN_INFO "firemode: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            printk(KERN_INFO "firemod: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
-        printk(KERN_INFO "firemode: accepted packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+        printk(KERN_INFO "firemod: accepted packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         return NF_ACCEPT; // drop TCP packet
     }
     return NF_DROP;
 }
 
 unsigned int nf_in_callback_dropper(void *priv,
-                            struct sk_buff *skb,
-                            const struct nf_hook_state *state)
+                                    struct sk_buff *skb,
+                                    const struct nf_hook_state *state)
 {
     char src_ip[16];     // Buffer for source IP
     char dst_ip[16];     // Buffer for destination IP
@@ -125,7 +157,7 @@ unsigned int nf_in_callback_dropper(void *priv,
 
     if (!skb)
         return NF_ACCEPT;
-        else
+    else
         return NF_DROP;
     iph = ip_hdr(skb);
     snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
@@ -145,24 +177,71 @@ unsigned int nf_in_callback_dropper(void *priv,
 
         if (iph->saddr != specific_ip)
         {
-            printk(KERN_INFO "firemode: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            printk(KERN_INFO "firemod: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
         else
         {
-            printk(KERN_INFO "firemode: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            printk(KERN_INFO "firemod: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         }
         if (tcph->dest == 1234)
         {
-            printk(KERN_INFO "firemode: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            printk(KERN_INFO "firemod: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
-        printk(KERN_INFO "firemode: accepted packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+        printk(KERN_INFO "firemod: accepted packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         return NF_ACCEPT; // drop TCP packet
     }
     return NF_DROP;
 }
 
+unsigned int nf_in_callback_informer(void *priv,
+                                     struct sk_buff *skb,
+                                     const struct nf_hook_state *state)
+{
+    char src_ip[16];   // Buffer for source IP
+    char dst_ip[16];   // Buffer for destination IP
+    struct iphdr *iph; // IP header
+    struct tcphdr *tcph;
+
+    if (!skb)
+        return NF_ACCEPT;
+    iph = ip_hdr(skb);
+
+    snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
+    snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
+    if (iph->protocol == IPPROTO_TCP)
+    {
+        tcph = tcp_hdr(skb);
+
+        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d LOCAL_IN\n", src_ip, tcph->source, dst_ip, tcph->dest);
+    }
+    return NF_ACCEPT;
+}
+
+unsigned int nf_pre_routing_callback_informer(void *priv,
+                                              struct sk_buff *skb,
+                                              const struct nf_hook_state *state)
+{
+    char src_ip[16];   // Buffer for source IP
+    char dst_ip[16];   // Buffer for destination IP
+    struct iphdr *iph; // IP header
+    struct tcphdr *tcph;
+
+    if (!skb)
+        return NF_ACCEPT;
+    
+    iph = ip_hdr(skb);
+    snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
+    snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
+    if (iph->protocol == IPPROTO_TCP)
+    {
+        tcph = tcp_hdr(skb);
+
+        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d PRE_ROUTING\n", src_ip, tcph->source, dst_ip, tcph->dest);
+    }
+    return NF_ACCEPT;
+}
 module_init(hello_init);
 module_exit(hello_exit);
 
