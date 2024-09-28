@@ -214,7 +214,7 @@ unsigned int nf_in_callback_informer(void *priv,
     {
         tcph = tcp_hdr(skb);
 
-        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d LOCAL_IN\n", src_ip, tcph->source, dst_ip, tcph->dest);
+        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d LOCAL_IN\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest));
     }
     return NF_ACCEPT;
 }
@@ -238,7 +238,7 @@ unsigned int nf_pre_routing_callback_informer(void *priv,
     {
         tcph = tcp_hdr(skb);
 
-        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d PRE_ROUTING\n", src_ip, tcph->source, dst_ip, tcph->dest);
+        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d PRE_ROUTING\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest));
     }
     return NF_ACCEPT;
 }
