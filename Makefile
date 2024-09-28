@@ -1,4 +1,4 @@
-obj-m += hello_kernel.o
+obj-m += firemod.o
 PWD := $(CURDIR)
 
 all:

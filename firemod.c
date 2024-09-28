@@ -1,0 +1,169 @@
+#include <linux/init.h> /* Needed for the macros */
+#include <linux/kernel.h>
+#include <linux/module.h> /* Needed by all modules */
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
+#include <linux/udp.h>
+#include <linux/tcp.h>
+#include <linux/net.h>
+#include <linux/ip.h>
+#include <linux/string.h> // For memcpy
+#include <linux/inet.h>   // For inet_ntop
+
+typedef struct
+{
+    /* User fills in from here down. */
+    nf_hookfn *hook;        // callback function
+    struct net_device *dev; // network device interface
+    void *priv;
+    u_int8_t pf;          // protocol
+    unsigned int hooknum; // Netfilter hook enum
+    /* Hooks are ordered in ascending priority. */
+    int priority; // priority of callback function
+} nf_hook_ops;
+
+unsigned int nf_in_callback(void *priv,
+                            struct sk_buff *skb,
+                            const struct nf_hook_state *state);
+
+unsigned int nf_in_callback_dropper(void *priv,
+                            struct sk_buff *skb,
+                            const struct nf_hook_state *state);
+
+unsigned int nf_out_hook(void *priv,
+                         struct sk_buff *skb,
+                         const struct nf_hook_state *state);
+
+static struct nf_hook_ops *nf_init_block_ops = NULL;
+static int __init hello_init(void)
+{
+    nf_init_block_ops = (struct nf_hook_ops *)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
+    if (nf_init_block_ops != NULL)
+    {
+        nf_init_block_ops->hook = (nf_hookfn *)nf_in_callback;
+        nf_init_block_ops->hooknum = NF_INET_LOCAL_IN;
+        nf_init_block_ops->pf = NFPROTO_IPV4;
+        nf_init_block_ops->priority = NF_IP_PRI_LAST; // set the priority
+
+        nf_register_net_hook(&init_net, nf_init_block_ops);
+    }
+    printk(KERN_INFO "firemode: Hello, world\n");
+    return 0;
+}
+
+static void __exit hello_exit(void)
+{
+    if (nf_init_block_ops != NULL)
+    {
+        nf_unregister_net_hook(&init_net, nf_init_block_ops);
+        kfree(nf_init_block_ops);
+    }
+    printk(KERN_INFO "firemod:Goodbye, world\n");
+}
+
+#define ALLOWED_IP "192.168.1.61"
+
+unsigned int nf_in_callback(void *priv,
+                            struct sk_buff *skb,
+                            const struct nf_hook_state *state)
+{
+    char src_ip[16];     // Buffer for source IP
+    char dst_ip[16];     // Buffer for destination IP
+    struct iphdr *iph;   // IP header
+    struct udphdr *udph; // UDP header
+    struct tcphdr *tcph;
+    u32 specific_ip;
+
+    if (!skb)
+        return NF_ACCEPT;
+    iph = ip_hdr(skb);
+    snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
+    snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
+    // retrieve the IP headers from the packet
+    // if(iph->protocol == IPPROTO_UDP) {
+    //	udph = udp_hdr(skb);
+    //	if(ntohs(udph->dest) == 53) {
+    //		return NF_ACCEPT; // accept UDP packet
+    //	}
+    //}
+    specific_ip = in_aton(ALLOWED_IP);
+
+    if (iph->protocol == IPPROTO_TCP)
+    {
+        tcph = tcp_hdr(skb);
+
+        if (iph->saddr != specific_ip)
+        {
+            printk(KERN_INFO "firemode: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            return NF_DROP; // drop TCP packet
+        }
+        else
+        {
+            printk(KERN_INFO "firemode: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+        }
+        if (tcph->dest == 1234)
+        {
+            printk(KERN_INFO "firemode: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            return NF_DROP; // drop TCP packet
+        }
+        printk(KERN_INFO "firemode: accepted packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+        return NF_ACCEPT; // drop TCP packet
+    }
+    return NF_DROP;
+}
+
+unsigned int nf_in_callback_dropper(void *priv,
+                            struct sk_buff *skb,
+                            const struct nf_hook_state *state)
+{
+    char src_ip[16];     // Buffer for source IP
+    char dst_ip[16];     // Buffer for destination IP
+    struct iphdr *iph;   // IP header
+    struct udphdr *udph; // UDP header
+    struct tcphdr *tcph;
+    u32 specific_ip;
+
+    if (!skb)
+        return NF_ACCEPT;
+        else
+        return NF_DROP;
+    iph = ip_hdr(skb);
+    snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
+    snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
+    // retrieve the IP headers from the packet
+    // if(iph->protocol == IPPROTO_UDP) {
+    //	udph = udp_hdr(skb);
+    //	if(ntohs(udph->dest) == 53) {
+    //		return NF_ACCEPT; // accept UDP packet
+    //	}
+    //}
+    specific_ip = in_aton(ALLOWED_IP);
+
+    if (iph->protocol == IPPROTO_TCP)
+    {
+        tcph = tcp_hdr(skb);
+
+        if (iph->saddr != specific_ip)
+        {
+            printk(KERN_INFO "firemode: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            return NF_DROP; // drop TCP packet
+        }
+        else
+        {
+            printk(KERN_INFO "firemode: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+        }
+        if (tcph->dest == 1234)
+        {
+            printk(KERN_INFO "firemode: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+            return NF_DROP; // drop TCP packet
+        }
+        printk(KERN_INFO "firemode: accepted packet. src %s:%d, dst %s:%d\n", src_ip,tcph->source, dst_ip,tcph->dest);
+        return NF_ACCEPT; // drop TCP packet
+    }
+    return NF_DROP;
+}
+
+module_init(hello_init);
+module_exit(hello_exit);
+
+MODULE_LICENSE("GPL");
