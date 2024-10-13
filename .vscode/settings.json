@@ -1,5 +1,11 @@
 {
     "files.associations": {
-        "internet": "c"
+        "internet": "c",
+        "rule.h": "c",
+        "stdafx.h": "c",
+        "rule_tests.h": "c",
+        "ruleparser.h": "c",
+        "stdio.h": "c",
+        "stdlib.h": "c"
     }
 }

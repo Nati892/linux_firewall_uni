@@ -1,15 +1,5 @@
-#include <linux/init.h> /* Needed for the macros */
-#include <linux/kernel.h>
-#include <linux/module.h> /* Needed by all modules */
-#include <linux/netfilter.h>
-#include <linux/netfilter_ipv4.h>
-#include <linux/udp.h>
-#include <linux/tcp.h>
-#include <linux/net.h>
-#include <linux/ip.h>
-#include <linux/string.h> // For memcpy
-#include <linux/inet.h>   // For inet_ntop
-
+#include "stdafx.h"
+#include "Rule.h"
 typedef struct
 {
     /* User fills in from here down. */
@@ -48,11 +38,14 @@ unsigned int nf_out_hook(void *priv,
 
 static struct nf_hook_ops *nf_init_block_ops = NULL;
 static struct nf_hook_ops *nf_pre_route_block_ops = NULL;
+
 static int __init hello_init(void)
 {
+    // allocate mem for ops structs
     nf_init_block_ops = (struct nf_hook_ops *)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     nf_pre_route_block_ops = (struct nf_hook_ops *)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
 
+    // config and register hooks
     if (nf_init_block_ops != NULL)
     {
         nf_init_block_ops->hook = (nf_hookfn *)nf_in_callback_informer;
@@ -63,6 +56,7 @@ static int __init hello_init(void)
         nf_register_net_hook(&init_net, nf_init_block_ops);
     }
 
+    // config and register hooks
     if (nf_pre_route_block_ops != NULL)
     {
         nf_pre_route_block_ops->hook = (nf_hookfn *)nf_pre_routing_callback_informer;
@@ -203,6 +197,8 @@ unsigned int nf_in_callback_informer(void *priv,
     char dst_ip[16];   // Buffer for destination IP
     struct iphdr *iph; // IP header
     struct tcphdr *tcph;
+    struct sock *sk;
+    pid_t pid=0;
 
     if (!skb)
         return NF_ACCEPT;
@@ -214,7 +210,12 @@ unsigned int nf_in_callback_informer(void *priv,
     {
         tcph = tcp_hdr(skb);
 
-        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d LOCAL_IN\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest));
+        sk = skb->sk;
+        if (sk && sk->sk_socket && sk->sk_socket->file)
+        {
+            pid=pid_vnr(sk->sk_socket->file->f_owner.pid);
+        }
+        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d LOCAL_IN, pid: %d\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest),pid);
     }
     return NF_ACCEPT;
 }
@@ -228,9 +229,10 @@ unsigned int nf_pre_routing_callback_informer(void *priv,
     struct iphdr *iph; // IP header
     struct tcphdr *tcph;
 
+    
     if (!skb)
         return NF_ACCEPT;
-    
+
     iph = ip_hdr(skb);
     snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
     snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
