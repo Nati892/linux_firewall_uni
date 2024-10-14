@@ -4,4 +4,6 @@
 #include "../Rule.h"
 int test_rule_count1();
 int test_rule_count2();
+
+int test_rule_parse1();
 #endif

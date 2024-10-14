@@ -2,7 +2,7 @@
 CC = gcc
 
 # Compiler flags
-CFLAGS = -Wall -Werror
+CFLAGS = -Wall -Werror -g
 
 # Target executable name
 TARGET = tests

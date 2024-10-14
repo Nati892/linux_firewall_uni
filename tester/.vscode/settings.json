@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "main.c": "c",
         "internet": "c",
         "rule.h": "c",
         "stdafx.h": "c",
