@@ -58,6 +58,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
+  rule_count = test_rules_parse4();
+    if (rule_count > 0)
+    {
+        printf("test6 passed %d\n", rule_count);
+    }
+    else
+    {
+        printf("pak\n");
+        return 1;
+    }
+
 
     return 0;
 }

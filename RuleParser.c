@@ -34,10 +34,77 @@ int GetRuleCount(char *in_json, int length)
     return count;
 }
 
-fire_BOOL ParseRules(char *in_json, int length, fire_Rule *rule_table, int table_size)
+fire_BOOL ParseRules(char *in_json,
+                     int length,
+                     fire_Rule **rule_table_inbound, int *table_size_inbound,
+                     fire_Rule **rule_table_outbound, int *table_size_outbound)
 {
-    return fire_FALSE;
+    // Initialize counts for inbound and outbound rules
+    int inbound_count = 0;
+    int outbound_count = 0;
+
+    // Count the total number of rules in JSON input
+    int rule_count = GetRuleCount(in_json, length);
+    if (rule_count < 0) {
+        printf("Error: Could not count rules in JSON\n");
+        return fire_FALSE;
+    }
+
+    // Parse JSON input into a temporary list of rules
+    fire_Rule *parsed_rules = parse_json_list(in_json, rule_count);
+    if (parsed_rules == NULL) {
+        printf("Error: Failed to parse JSON input\n");
+        return fire_FALSE;
+    }
+
+    // First pass: Count inbound and outbound rules
+    for (int i = 0; i < rule_count; i++) {
+        if (parsed_rules[i].direction == fire_dir_INBOUND) {
+            inbound_count++;
+        } else if (parsed_rules[i].direction == fire_dir_OUTBOUND) {
+            outbound_count++;
+        } else {
+            printf("Error: Invalid rule direction\n");
+            free(parsed_rules);
+            return fire_FALSE;
+        }
+    }
+
+    // Allocate memory for inbound and outbound rule tables based on counts
+    *rule_table_inbound = (fire_Rule *)malloc(inbound_count * sizeof(fire_Rule));
+    *rule_table_outbound = (fire_Rule *)malloc(outbound_count * sizeof(fire_Rule));
+
+    // Check if allocations were successful
+    if (*rule_table_inbound == NULL || *rule_table_outbound == NULL) {
+        printf("Error: Memory allocation failed\n");
+        free(parsed_rules);
+        if (*rule_table_inbound) free(*rule_table_inbound);
+        if (*rule_table_outbound) free(*rule_table_outbound);
+        return fire_FALSE;
+    }
+
+    // Second pass: Populate inbound and outbound tables
+    int inbound_index = 0;
+    int outbound_index = 0;
+    for (int i = 0; i < rule_count; i++) {
+        if (parsed_rules[i].direction == fire_dir_INBOUND) {
+            (*rule_table_inbound)[inbound_index++] = parsed_rules[i];
+        } else if (parsed_rules[i].direction == fire_dir_OUTBOUND) {
+            (*rule_table_outbound)[outbound_index++] = parsed_rules[i];
+        }
+    }
+
+    // Set the table sizes
+    *table_size_inbound = inbound_count;
+    *table_size_outbound = outbound_count;
+
+    // Free the temporary parsed rules array
+    free(parsed_rules);
+
+    // Return success after populating both tables
+    return fire_TRUE;
 }
+
 
 __uint32_t char_array_to_u32(const char ip[4])
 {
@@ -214,8 +281,7 @@ char *extract_value(const char *json, const char *key)
 fire_Rule *parse_json_list(char *input, int count)
 {
     char *p = input;
-    int rule_index_first = 0;
-    int rule_index_second = count - 1;
+    int rule_index=0;
     fire_Rule *rule_array = (fire_Rule *)malloc(sizeof(fire_Rule) * count);
     if (rule_array == NULL)
     {
@@ -298,21 +364,10 @@ fire_Rule *parse_json_list(char *input, int count)
             printf("Error: Input with rule id parsing%d\n", rule.id);
             return NULL;
         }
-        if (rule_index_first > rule_index_second)
-        {
-            printf("Error: Input with rule_index_second parsing\n");
-            free(rule_array);
-            return NULL;
-        }
-        if (rule.direction == fire_dir_INBOUND)
-        {
+       
 
-            rule_array[rule_index_first] = rule;
-        }
-        else
-        {
-            rule_array[rule_index_second] = rule;
-        }
+            rule_array[rule_index] = rule;
+            rule_index++;
         // Move to the next object
         p = end;
 
@@ -501,7 +556,7 @@ fire_Rule parse_json_to_rule(char *json_string)
         {
             rule.id = -1;
             free(value);
-                        printf("error parsing enabled \n");
+            printf("error parsing enabled \n");
             return rule;
         }
     }

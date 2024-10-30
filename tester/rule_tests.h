@@ -8,4 +8,5 @@ int test_rule_count2();
 int test_rules_parse1();
 int test_rules_parse2();
 int test_rules_parse3();
+int test_rules_parse4();
 #endif
