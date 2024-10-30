@@ -12,10 +12,10 @@ int test_rule_count2()
     return 1;
 }
 
-int test_rule_parse1()
+int test_rules_parse1()
 {
     const char *json_string = "{"
-                              "\"id\": 0,"
+                              "\"id\": 67,"
                               "\"source_address\": \"0.99.0.0-255.255.255.254\","
                               "\"source_port\": \"65535\","
                               "\"destination_address\": \"0.0.0.0-255.255.255.255\","
@@ -27,27 +27,140 @@ int test_rule_parse1()
                               "\"description\": \"\""
                               "}";
 
-    fire_Rule *rule = parse_json_to_rule(json_string);
-    if (rule != NULL)
+    fire_Rule rule = parse_json_to_rule((char *)json_string);
+    if (rule.id != -1)
     {
-        printf("Parsed rule ID: %d\n", rule->id);
+        printf("Parsed rule ID: %d\n", rule.id);
         printf("Source address: %d.%d.%d.%d-%d.%d.%d.%d\n",
-               (unsigned char)rule->source_addresses[0], (unsigned char)rule->source_addresses[1], (unsigned char)rule->source_addresses[2], (unsigned char)rule->source_addresses[3],
-               (unsigned char)rule->source_addresses[4], (unsigned char)rule->source_addresses[5], (unsigned char)rule->source_addresses[6], (unsigned char)rule->source_addresses[7]);
-        printf("Source port: %d\n", rule->source_port);
+               (unsigned char)rule.source_addresses[0], (unsigned char)rule.source_addresses[1], (unsigned char)rule.source_addresses[2], (unsigned char)rule.source_addresses[3],
+               (unsigned char)rule.source_addresses[4], (unsigned char)rule.source_addresses[5], (unsigned char)rule.source_addresses[6], (unsigned char)rule.source_addresses[7]);
+        printf("Source port: %d\n", rule.source_port);
         printf("Dest address: %d.%d.%d.%d-%d.%d.%d.%d\n",
-               (unsigned char)rule->destination_addresses[0], (unsigned char)rule->destination_addresses[1], (unsigned char)rule->destination_addresses[2], (unsigned char)rule->destination_addresses[3],
-               (unsigned char)rule->destination_addresses[4], (unsigned char)rule->destination_addresses[5], (unsigned char)rule->destination_addresses[6], (unsigned char)rule->destination_addresses[7]);
-        printf("Dest port: %d\n", rule->destination_port);
-        printf("Protocol: %s\n", rule->proto == proto_TCP ? "TCP" : "UDP");
-        printf("Action: %s\n", rule->action == proto_ACCEPT ? "ACCEPT" : "DROP");
-        printf("Direction: %s\n", rule->direction == proto_INBOUND ? "INBOUND" : "OUTBOUND");
-        printf("Enabled: %s\n", rule->enabled == proto_TRUE ? "true" : "false");
-        free(rule);
+               (unsigned char)rule.destination_addresses[0], (unsigned char)rule.destination_addresses[1], (unsigned char)rule.destination_addresses[2], (unsigned char)rule.destination_addresses[3],
+               (unsigned char)rule.destination_addresses[4], (unsigned char)rule.destination_addresses[5], (unsigned char)rule.destination_addresses[6], (unsigned char)rule.destination_addresses[7]);
+        printf("Dest port: %d\n", rule.destination_port);
+        printf("Protocol: %s\n", rule.proto == fire_proto_TCP ? "TCP" : "UDP");
+        printf("Action: %s\n", rule.action == fire_ACCEPT ? "ACCEPT" : "DROP");
+        printf("Direction: %s\n", rule.direction == fire_dir_INBOUND ? "INBOUND" : "OUTBOUND");
+        printf("Enabled: %s\n", rule.enabled == fire_TRUE ? "true" : "false");
     }
     else
     {
-        printf("error parsing rule");
+        printf("error parsing rule\n");
     }
     return 1;
+}
+
+int test_rules_parse2()
+{
+    const char *json_string = "["
+                              "{"
+                              "\"id\": 0,"
+                              "\"source_address\": \"0.99.0.0-255.255.255.254\","
+                              "\"source_port\": \"65535\","
+                              "\"destination_address\": \"0.0.0.0-255.255.255.255\","
+                              "\"destination_port\": \"999999\","
+                              "\"protocol\": \"TCP\","
+                              "\"action\": \"ACCEPT\","
+                              "\"direction\": \"INBOUND\","
+                              "\"enabled\": true,"
+                              "\"description\": \"\""
+                              "},"
+                              "{"
+                              "\"id\": 1,"
+                              "\"source_address\": \"0.99.0.0-255.255.255.253\","
+                              "\"source_port\": \"65535\","
+                              "\"destination_address\": \"0.0.0.0-255.255.255.255\","
+                              "\"destination_port\": \"999999\","
+                              "\"protocol\": \"TCP\","
+                              "\"action\": \"ACCEPT\","
+                              "\"direction\": \"INBOUND\","
+                              "\"enabled\": true,"
+                              "\"description\": \"\""
+                              "},"
+                              "{"
+                              "\"id\": 2,"
+                              "\"source_address\": \"0.99.0.0-255.255.255.252\","
+                              "\"source_port\": \"65535\","
+                              "\"destination_address\": \"0.0.0.0-255.255.255.255\","
+                              "\"destination_port\": \"999999\","
+                              "\"protocol\": \"TCP\","
+                              "\"action\": \"ACCEPT\","
+                              "\"direction\": \"OUTBOUND\","
+                              "\"enabled\": true,"
+                              "\"description\": \"\""
+                              "}"
+                              "]";
+    int count = GetRuleCount((char *)json_string, strlen(json_string));
+    printf("count is %d\n", count);
+    if (count != 3)
+    {
+        printf("count is %d and not 3\n", count);
+        return -1;
+    }
+
+    // parse_json_list();
+
+    return count;
+}
+
+int test_rules_parse3()
+{
+    const char *json_string = "["
+                              "{"
+                              "\"id\": 0,"
+                              "\"source_address\": \"0.99.0.0-255.255.255.254\","
+                              "\"source_port\": \"65535\","
+                              "\"destination_address\": \"0.0.0.0-255.255.255.255\","
+                              "\"destination_port\": \"999999\","
+                              "\"protocol\": \"TCP\","
+                              "\"action\": \"ACCEPT\","
+                              "\"direction\": \"INBOUND\","
+                              "\"enabled\": true,"
+                              "\"description\": \"\""
+                              "},"
+                              "{"
+                              "\"id\": 1,"
+                              "\"source_address\": \"0.99.0.0-255.255.255.253\","
+                              "\"source_port\": \"65535\","
+                              "\"destination_address\": \"0.0.0.0-255.255.255.255\","
+                              "\"destination_port\": \"999999\","
+                              "\"protocol\": \"TCP\","
+                              "\"action\": \"ACCEPT\","
+                              "\"direction\": \"INBOUND\","
+                              "\"enabled\": true,"
+                              "\"description\": \"\""
+                              "},"
+                              "{"
+                              "\"id\": 2,"
+                              "\"source_address\": \"0.99.0.0-255.255.255.252\","
+                              "\"source_port\": \"65535\","
+                              "\"destination_address\": \"0.0.0.0-255.255.255.255\","
+                              "\"destination_port\": \"999999\","
+                              "\"protocol\": \"TCP\","
+                              "\"action\": \"ACCEPT\","
+                              "\"direction\": \"OUTBOUND\","
+                              "\"enabled\": true,"
+                              "\"description\": \"\""
+                              "}"
+                              "]";
+    int count = GetRuleCount((char *)json_string, strlen(json_string));
+    printf("count is %d\n", count);
+    if (count != 3)
+    {
+        printf("count is %d and not 3\n", count);
+        return -1;
+    }
+
+    fire_Rule *ptr = parse_json_list((char *)json_string, count);
+    if (ptr == NULL)
+    {
+        printf("got NULL ptr from parse_json_list\n");
+        return -1;
+    }
+    else
+    {
+        free(ptr);
+        return 1;
+    }
 }

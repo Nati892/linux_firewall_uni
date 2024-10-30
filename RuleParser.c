@@ -5,24 +5,24 @@ int GetRuleCount(char *in_json, int length)
     int count = 0;
     int i = 0;
 
-    fire_BOOL in_opening_brackets = proto_FALSE;
+    fire_BOOL in_opening_brackets = fire_FALSE;
     while (*in_json != '\0' && i < length)
     {
-        if (*in_json == '{' && in_opening_brackets == proto_FALSE)
+        if (*in_json == '{' && in_opening_brackets == fire_FALSE)
         {
-            in_opening_brackets = proto_TRUE;
+            in_opening_brackets = fire_TRUE;
             count++;
         }
-        else if (*in_json == '{' && in_opening_brackets == proto_TRUE) // report error
+        else if (*in_json == '{' && in_opening_brackets == fire_TRUE) // report error
         {
             return -1;
         }
 
-        if (*in_json == '}' && in_opening_brackets == proto_TRUE)
+        if (*in_json == '}' && in_opening_brackets == fire_TRUE)
         {
-            in_opening_brackets = proto_FALSE;
+            in_opening_brackets = fire_FALSE;
         }
-        else if (*in_json == '}' && in_opening_brackets == proto_FALSE) // report error
+        else if (*in_json == '}' && in_opening_brackets == fire_FALSE) // report error
         {
             return -1;
         }
@@ -36,14 +36,15 @@ int GetRuleCount(char *in_json, int length)
 
 fire_BOOL ParseRules(char *in_json, int length, fire_Rule *rule_table, int table_size)
 {
-    return proto_FALSE;
+    return fire_FALSE;
 }
 
-__uint32_t char_array_to_u32(const char ip[4]) {
+__uint32_t char_array_to_u32(const char ip[4])
+{
     // Combine bytes into a __u32
-    return ((__uint32_t)(unsigned char)ip[0] << 24) | 
-           ((__uint32_t)(unsigned char)ip[1] << 16) | 
-           ((__uint32_t)(unsigned char)ip[2] << 8)  | 
+    return ((__uint32_t)(unsigned char)ip[0] << 24) |
+           ((__uint32_t)(unsigned char)ip[1] << 16) |
+           ((__uint32_t)(unsigned char)ip[2] << 8) |
            ((__uint32_t)(unsigned char)ip[3]);
 }
 
@@ -99,7 +100,7 @@ int parse_ip(const char *ip, char *output)
                 free(rest);
                 return -1;
             }
-            output[i]=(char)res;
+            output[i] = (char)res;
         }
         i++;
     }
@@ -109,7 +110,7 @@ int parse_ip(const char *ip, char *output)
 }
 
 // Helper function to parse IP address range
-int parse_ip_range(const char *ip_range, char* output)
+int parse_ip_range(const char *ip_range, char *output)
 {
     char start_ip[MAX_IP_LENGTH], end_ip[MAX_IP_LENGTH];
     const char *delimiter = strchr(ip_range, '-');
@@ -209,28 +210,170 @@ char *extract_value(const char *json, const char *key)
     return value;
 }
 
-fire_Rule *parse_json_to_rule(const char *json_string)
+// Function to parse the list of JSON-like objects
+fire_Rule *parse_json_list(char *input, int count)
 {
-    int parse_error = 0;
-    fire_Rule *rule = (fire_Rule *)malloc(sizeof(fire_Rule));
-    if (rule == NULL)
+    char *p = input;
+    int rule_index_first = 0;
+    int rule_index_second = count - 1;
+    fire_Rule *rule_array = (fire_Rule *)malloc(sizeof(fire_Rule) * count);
+    if (rule_array == NULL)
     {
+        printf("Error: failed to allocate array size\n");
+        return NULL;
+    }
+    // Skip leading whitespace
+    while (isspace(*p))
+        p++;
+
+    // Ensure the string starts with '['
+    if (*p != '[')
+    {
+        printf("Error: Input doesn't start with '['\n");
+        free(rule_array);
+        return NULL;
+    }
+    p++;
+
+    // Parse each JSON object
+    while (*p)
+    {
+        // Skip whitespace
+        while (isspace(*p))
+            p++;
+
+        if (*p == ']')
+        {
+            // End of list
+            break;
+        }
+
+        if (*p != '{')
+        {
+            printf("Error: Expected '{' at position %ld\n", p - input);
+            free(rule_array);
+            return NULL;
+        }
+
+        // Find the end of this JSON object
+        char *end = p + 1;
+        int brace_count = 1;
+        while (*end && brace_count > 0)
+        {
+            if (*end == '{')
+                brace_count++;
+            if (*end == '}')
+                brace_count--;
+            end++;
+        }
+
+        if (brace_count != 0)
+        {
+            printf("Error: Unmatched braces\n");
+            free(rule_array);
+            return NULL;
+        }
+
+        // Copy this JSON object to a new string
+        size_t obj_len = end - p;
+        char *obj = malloc(obj_len + 1);
+        if (obj == NULL)
+        {
+            printf("Error: Memory allocation failed\n");
+            free(rule_array);
+            return NULL;
+        }
+        strncpy(obj, p, obj_len);
+        obj[obj_len] = '\0';
+
+        // Process this JSON object
+        fire_Rule rule = parse_json_to_rule(obj);
+
+        // Free the memory
+        free(obj);
+
+        if (rule.id < 0) // error here
+        {
+            free(rule_array);
+            printf("Error: Input with rule id parsing%d\n", rule.id);
+            return NULL;
+        }
+        if (rule_index_first > rule_index_second)
+        {
+            printf("Error: Input with rule_index_second parsing\n");
+            free(rule_array);
+            return NULL;
+        }
+        if (rule.direction == fire_dir_INBOUND)
+        {
+
+            rule_array[rule_index_first] = rule;
+        }
+        else
+        {
+            rule_array[rule_index_second] = rule;
+        }
+        // Move to the next object
+        p = end;
+
+        // Skip whitespace
+        while (isspace(*p))
+            p++;
+
+        // Check for comma or end of list
+        if (*p == ',')
+        {
+            p++;
+        }
+        else if (*p != ']')
+        {
+            printf("Error: Expected ',' or ']' at position %ld\n", p - input);
+            free(rule_array);
+            return NULL;
+        }
+    }
+
+    // Ensure the string ends with ']'
+    if (*p != ']')
+    {
+        printf("Error: Input doesn't end with ']'\n");
+        free(rule_array);
         return NULL;
     }
 
-    char *value;
+    // Skip trailing whitespace
+    p++;
+    while (isspace(*p))
+        p++;
 
+    // Ensure we've reached the end of the string
+    if (*p != '\0')
+    {
+        printf("Error: Unexpected characters after closing ']'\n");
+        free(rule_array);
+        return NULL;
+    }
+
+    printf("Parsing completed successfully\n");
+    return rule_array;
+}
+
+fire_Rule parse_json_to_rule(char *json_string)
+{
+    int parse_error = 0;
+    fire_Rule rule;
+
+    char *value;
     // Parse id
     value = extract_value(json_string, "id");
     if (value)
     {
-        rule->id = parse_int(value);
+        rule.id = parse_int(value);
         free(value);
-        if (rule->id == -1)
+        if (rule.id < 0)
         {
-            printf("error parsing id");
-            free(rule);
-            return NULL;
+            printf("error parsing id\n");
+            return rule;
         }
     }
 
@@ -238,13 +381,13 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     value = extract_value(json_string, "source_address");
     if (value)
     {
-        parse_error = parse_ip_range(value, rule->source_addresses);
+        parse_error = parse_ip_range(value, rule.source_addresses);
         free(value);
         if (parse_error == -1)
         {
-            printf("error parsing source ip range");
-            free(rule);
-            return NULL;
+            rule.id = -1;
+            printf("error parsing source ip range\n");
+            return rule;
         }
     }
 
@@ -252,13 +395,13 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     value = extract_value(json_string, "source_port");
     if (value)
     {
-        rule->source_port = parse_port_range(value);
+        rule.source_port = parse_port_range(value);
         free(value);
-        if (rule->source_port == -1)
+        if (rule.source_port == -1)
         {
-            printf("error parsing source port");
-            free(rule);
-            return NULL;
+            rule.id = -1;
+            printf("error parsing source port\n");
+            return rule;
         }
     }
 
@@ -266,13 +409,13 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     value = extract_value(json_string, "destination_address");
     if (value)
     {
-        parse_ip_range(value, rule->destination_addresses);
+        parse_ip_range(value, rule.destination_addresses);
         free(value);
         if (parse_error == -1)
         {
-            printf("error parsing dest ip address range");
-            free(rule);
-            return NULL;
+            rule.id = -1;
+            printf("error parsing dest ip address range\n");
+            return rule;
         }
     }
 
@@ -280,12 +423,13 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     value = extract_value(json_string, "destination_port");
     if (value)
     {
-        rule->destination_port = parse_port_range(value);
+        rule.destination_port = parse_port_range(value);
         free(value);
-        if (rule->destination_port == -1)
+        if (rule.destination_port == -1)
         {
-            free(rule);
-            return NULL;
+            rule.id = -1;
+            printf("error parsing dest port address range");
+            return rule;
         }
     }
 
@@ -294,14 +438,17 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     if (value)
     {
         if (strcmp(value, "TCP") == 0)
-            rule->proto = proto_TCP;
+            rule.proto = fire_proto_TCP;
         else if (strcmp(value, "UDP") == 0)
-            rule->proto = proto_UDP;
+            rule.proto = fire_proto_UDP;
+        else if (strcmp(value, "ANY") == 0)
+            rule.proto = fire_proto_ANY;
         else
         {
+            rule.id = -1;
             free(value);
-            free(rule);
-            return NULL;
+            printf("error parsing protocol\n");
+            return rule;
         }
         free(value);
     }
@@ -311,14 +458,15 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     if (value)
     {
         if (strcmp(value, "ACCEPT") == 0)
-            rule->action = proto_ACCEPT;
+            rule.action = fire_ACCEPT;
         else if (strcmp(value, "DROP") == 0)
-            rule->action = proto_DROP;
+            rule.action = fire_DROP;
         else
         {
+            rule.id = -1;
             free(value);
-            free(rule);
-            return NULL;
+            printf("error parsing action\n");
+            return rule;
         }
         free(value);
     }
@@ -328,14 +476,15 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     if (value)
     {
         if (strcmp(value, "INBOUND") == 0)
-            rule->direction = proto_INBOUND;
-        else if (strcmp(value, "DROP") == 0)
-            rule->direction = proto_OUTBOUND;
+            rule.direction = fire_dir_INBOUND;
+        else if (strcmp(value, "OUTBOUND") == 0)
+            rule.direction = fire_dir_OUTBOUND;
         else
         {
+            rule.id = -1;
             free(value);
-            free(rule);
-            return NULL;
+            printf("error parsing diraction\n");
+            return rule;
         }
         free(value);
     }
@@ -345,14 +494,15 @@ fire_Rule *parse_json_to_rule(const char *json_string)
     if (value)
     {
         if (strcmp(value, "true") == 0)
-            rule->enabled = proto_TRUE;
+            rule.enabled = fire_TRUE;
         else if (strcmp(value, "false") == 0)
-            rule->enabled = proto_FALSE;
+            rule.enabled = fire_FALSE;
         else
         {
+            rule.id = -1;
             free(value);
-            free(rule);
-            return NULL;
+                        printf("error parsing enabled \n");
+            return rule;
         }
     }
 

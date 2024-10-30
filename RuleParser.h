@@ -15,6 +15,6 @@
 int GetRuleCount(char* in_json, int length);
 
 fire_BOOL ParseRules(char* in_json,int length,fire_Rule* rule_table, int table_size);
-fire_Rule* parse_json_to_rule(const char* json_string) ;
-
+fire_Rule parse_json_to_rule(char* json_string) ;
+fire_Rule* parse_json_list(char* input,int count);
 #endif
