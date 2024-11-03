@@ -5,6 +5,8 @@
 #include "Rule/RuleParser.h"
 #include "tester/rule_tests.h"
 #include "tester/main.h"
+#include "Control/net_control.h"
+#include "Control/mod_config.h"
 typedef struct
 {
     /* User fills in from here down. */
@@ -44,23 +46,7 @@ unsigned int nf_out_hook(void *priv,
 static struct nf_hook_ops *nf_init_block_ops = NULL;
 static struct nf_hook_ops *nf_pre_route_block_ops = NULL;
 
-static void RunTests1(void)
-{
-    shared_print(KERN_INFO "firemod: starting tests in kernel!");
-    int count = parse_test1();
-    int tests_res = RunTests();
-    if (tests_res == 0)
-    {
-        shared_print(KERN_INFO "firemod: TESTS PASSED!");
-    }
-    else
-    {
-        shared_print(KERN_INFO "firemod: TESTS FAILED!");
-    }
-    shared_print(KERN_INFO "firemod: end of tests in kernel!");
-}
-
-static int __init hello_init(void)
+ int __init fire_module_init(void)
 {
     // allocate mem for ops structs
     nf_init_block_ops = (struct nf_hook_ops *)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
@@ -74,7 +60,7 @@ static int __init hello_init(void)
         nf_init_block_ops->pf = NFPROTO_IPV4;
         nf_init_block_ops->priority = NF_IP_PRI_LAST; // set the priority
 
-        nf_register_net_hook(&init_net, nf_init_block_ops);
+        // nf_register_net_hook(&init_net, nf_init_block_ops);
     }
 
     // config and register hooks
@@ -85,29 +71,41 @@ static int __init hello_init(void)
         nf_pre_route_block_ops->pf = NFPROTO_IPV4;
         nf_pre_route_block_ops->priority = NF_IP_PRI_LAST; // set the priority
 
-        nf_register_net_hook(&init_net, nf_pre_route_block_ops);
+        // nf_register_net_hook(&init_net, nf_pre_route_block_ops);
     }
-    shared_print(KERN_INFO "firemod: Hello, world1\n");
-    RunTests1();
 
+    shared_print("firemod kernel module firewall loading\n");
+    init_config_file();
+
+    int netlink_res = netlink_init();
+    if (netlink_res != 0)
+    {
+        shared_print(KERN_INFO "firemod: BAD INIT FOR NETLINK\n");
+    }
+    else
+    {
+        shared_print(KERN_INFO "firemod: GOOD INIT FOR NETLINK\n");
+    }
     return 0;
 }
 
-static void __exit hello_exit(void)
+ void __exit fire_module_exit(void)
 {
     if (nf_init_block_ops != NULL)
     {
-        nf_unregister_net_hook(&init_net, nf_init_block_ops);
+        // nf_unregister_net_hook(&init_net, nf_init_block_ops);
         shared_free(nf_init_block_ops);
     }
 
     if (nf_pre_route_block_ops != NULL)
     {
-        nf_unregister_net_hook(&init_net, nf_pre_route_block_ops);
+        // nf_unregister_net_hook(&init_net, nf_pre_route_block_ops);
         shared_free(nf_pre_route_block_ops);
     }
 
-    shared_print(KERN_INFO "firemod:Goodbye, world\n");
+    close_netlink();
+    cleanup_config();
+    shared_print(KERN_INFO "firemod:unloading\n");
 }
 
 #define ALLOWED_IP "192.168.1.61"
@@ -266,7 +264,7 @@ unsigned int nf_pre_routing_callback_informer(void *priv,
     }
     return NF_ACCEPT;
 }
-module_init(hello_init);
-module_exit(hello_exit);
+module_init(fire_module_init);
+module_exit(fire_module_exit);
 
 MODULE_LICENSE("GPL");

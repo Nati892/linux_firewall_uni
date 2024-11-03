@@ -20,7 +20,7 @@ void shared_print(const char *fmt, ...) {
     va_end(args);
     
     // Prepend KERN_INFO and print
-    printk(KERN_INFO "%s", buf);
+    printk(KERN_INFO "firemod: %s", buf);
 }
 
 #else
@@ -42,7 +42,7 @@ void shared_print(const char *fmt, ...) {
     char *buffer;
 
     // Allocate enough space for the formatted string plus a newline
-    buffer = (char *)malloc(len + 2); // +1 for \n and +1 for \0
+    buffer = (char *)malloc(len + 20); // +1 for \n and +1 for \0
 
     if (buffer == NULL) {
         fprintf(stderr, "Memory allocation failed\n");

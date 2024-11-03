@@ -6,6 +6,8 @@
         "t.h": "c",
         "stdafx.h": "c",
         "module.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "net_control.h": "c",
+        "mod_config.h": "c"
     }
 }

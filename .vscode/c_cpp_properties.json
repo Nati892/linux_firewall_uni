@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Linux Kernel",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/lib/modules/$(shell uname -r)/build/include",
+                "/lib/modules/$(shell uname -r)/build/include/linux",
+                "/lib/modules/$(shell uname -r)/build/include/generated",
+                "/lib/modules/$(shell uname -r)/build/arch/x86/include",
+                "/lib/modules/$(shell uname -r)/build/arch/x86/include/generated"
+            ],
+            "defines": [
+                "__KERNEL__",
+                "MODULE",
+                "KBUILD_MODNAME=\"${workspaceRootFolderName}\""
+            ],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu89",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

@@ -36,9 +36,9 @@ typedef enum fire_direction
 typedef struct fire_Rule
 {
     int32_t id;
-    char source_addresses[8];
+    SHARED_UINT32 source_addresses;
     uint32_t source_port;
-    char destination_addresses[8];
+    SHARED_UINT32 destination_addresses;
     uint32_t destination_port;
     fire_net_protocol proto;
     fire_action action;

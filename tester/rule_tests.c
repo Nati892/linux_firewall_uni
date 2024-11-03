@@ -8,18 +8,16 @@ void print_rule(fire_Rule *rule)
         return;
     }
     shared_print("Parsed rule ID: %d", rule->id);
-    shared_print("Source address: %d.%d.%d.%d-%d.%d.%d.%d",
-           (unsigned char)rule->source_addresses[0], (unsigned char)rule->source_addresses[1], (unsigned char)rule->source_addresses[2], (unsigned char)rule->source_addresses[3],
-           (unsigned char)rule->source_addresses[4], (unsigned char)rule->source_addresses[5], (unsigned char)rule->source_addresses[6], (unsigned char)rule->source_addresses[7]);
+    shared_print("Source address: %d.%d.%d.%d       \n",
+           ((unsigned char*)&(rule->source_addresses))[0], ((unsigned char*)&(rule->source_addresses))[1], ((unsigned char*)&(rule->source_addresses))[2], ((unsigned char*)&(rule->source_addresses))[3]);
     shared_print("Source port: %d", rule->source_port);
-    shared_print("Dest address: %d.%d.%d.%d-%d.%d.%d.%d",
-           (unsigned char)rule->destination_addresses[0], (unsigned char)rule->destination_addresses[1], (unsigned char)rule->destination_addresses[2], (unsigned char)rule->destination_addresses[3],
-           (unsigned char)rule->destination_addresses[4], (unsigned char)rule->destination_addresses[5], (unsigned char)rule->destination_addresses[6], (unsigned char)rule->destination_addresses[7]);
-    shared_print("Dest port: %d", rule->destination_port);
-    shared_print("Protocol: %s", rule->proto == fire_proto_TCP ? "TCP" : "UDP");
-    shared_print("Action: %s", rule->action == fire_ACCEPT ? "ACCEPT" : "DROP");
-    shared_print("Direction: %s", rule->direction == fire_dir_INBOUND ? "INBOUND" : "OUTBOUND");
-    shared_print("Enabled: %s", rule->enabled == fire_TRUE ? "true" : "false");
+    shared_print("Dest address: %d.%d.%d.%d       \n",
+           ((unsigned char*)&(rule->destination_addresses))[0], ((unsigned char*)&(rule->destination_addresses))[1], ((unsigned char*)&(rule->destination_addresses))[2], ((unsigned char*)&(rule->destination_addresses))[3]);
+    shared_print("Dest port: %d       \n", rule->destination_port);
+    shared_print("Protocol: %s       \n", rule->proto == fire_proto_TCP ? "TCP" : "UDP");
+    shared_print("Action: %s       \n", rule->action == fire_ACCEPT ? "ACCEPT" : "DROP");
+    shared_print("Direction: %s       \n", rule->direction == fire_dir_INBOUND ? "INBOUND" : "OUTBOUND");
+    shared_print("Enabled: %s         \n", rule->enabled == fire_TRUE ? "true" : "false");
 }
 
 int parse_test1()
@@ -38,33 +36,21 @@ int parse_test3()
 {
     const char *json_string = "{"
                               "\"id\": 67,"
-                              "\"source_address\": \"0.99.0.0\","
+                              "\"source_address\": \"255.99.244.54\","
                               "\"source_port\": \"65535\","
-                              "\"destination_address\": \"0.0.0.0\","
+                              "\"destination_address\": \"255.0.0.255\","
                               "\"destination_port\": \"9999\","
-                              "\"protocol\": \"TCP\","
-                              "\"action\": \"ACCEPT\","
-                              "\"direction\": \"INBOUND\","
-                              "\"enabled\": true,"
+                              "\"protocol\": \"UDP\","
+                              "\"action\": \"DROP\","
+                              "\"direction\": \"OUTBOUND\","
+                              "\"enabled\": false,"
                               "\"description\": \"\""
                               "}";
 
     fire_Rule rule = parse_json_to_rule((char *)json_string);
     if (rule.id != -1)
     {
-        shared_print("Parsed rule ID: %d", rule.id);
-        shared_print("Source address: %d.%d.%d.%d-%d.%d.%d.%d",
-               (unsigned char)rule.source_addresses[0], (unsigned char)rule.source_addresses[1], (unsigned char)rule.source_addresses[2], (unsigned char)rule.source_addresses[3],
-               (unsigned char)rule.source_addresses[4], (unsigned char)rule.source_addresses[5], (unsigned char)rule.source_addresses[6], (unsigned char)rule.source_addresses[7]);
-        shared_print("Source port: %d", rule.source_port);
-        shared_print("Dest address: %d.%d.%d.%d-%d.%d.%d.%d",
-               (unsigned char)rule.destination_addresses[0], (unsigned char)rule.destination_addresses[1], (unsigned char)rule.destination_addresses[2], (unsigned char)rule.destination_addresses[3],
-               (unsigned char)rule.destination_addresses[4], (unsigned char)rule.destination_addresses[5], (unsigned char)rule.destination_addresses[6], (unsigned char)rule.destination_addresses[7]);
-        shared_print("Dest port: %d", rule.destination_port);
-        shared_print("Protocol: %s", rule.proto == fire_proto_TCP ? "TCP" : "UDP");
-        shared_print("Action: %s", rule.action == fire_ACCEPT ? "ACCEPT" : "DROP");
-        shared_print("Direction: %s", rule.direction == fire_dir_INBOUND ? "INBOUND" : "OUTBOUND");
-        shared_print("Enabled: %s", rule.enabled == fire_TRUE ? "true" : "false");
+      print_rule(&rule);
     }
     else
     {

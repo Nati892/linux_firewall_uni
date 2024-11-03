@@ -50,6 +50,7 @@ fire_BOOL ParseRules(char *in_json,
         shared_print("Error: Could not count rules in JSON");
         return fire_FALSE;
     }
+    shared_print("Error: total rule count is %d\n", rule_count);
 
     // Parse JSON input into a temporary list of rules
     fire_Rule *parsed_rules = parse_json_list(in_json, rule_count);
@@ -79,8 +80,13 @@ fire_BOOL ParseRules(char *in_json,
     }
 
     // Allocate memory for inbound and outbound rule tables based on counts
-    *rule_table_inbound = (fire_Rule *)shared_malloc(inbound_count * sizeof(fire_Rule));
-    *rule_table_outbound = (fire_Rule *)shared_malloc(outbound_count * sizeof(fire_Rule));
+    size_t in_amount_alloc = inbound_count * sizeof(fire_Rule);
+    size_t out_amount_alloc = outbound_count * sizeof(fire_Rule);
+    *rule_table_inbound = (fire_Rule *)shared_malloc(in_amount_alloc);
+    *rule_table_outbound = (fire_Rule *)shared_malloc(out_amount_alloc);
+
+    shared_print("Alloc bytes for in amount: %d\n", in_amount_alloc);
+    shared_print("Alloc bytes for out amount: %d\n", out_amount_alloc);
 
     // Check if allocations were successful
     if (*rule_table_inbound == NULL || *rule_table_outbound == NULL)
@@ -112,6 +118,9 @@ fire_BOOL ParseRules(char *in_json,
     // Set the table sizes
     *table_size_inbound = inbound_count;
     *table_size_outbound = outbound_count;
+
+    shared_print("Alloc amount for in amount: %d, %d\n", inbound_count, *table_size_inbound);
+    shared_print("Alloc amount for out amount: %d, %d\n", outbound_count, *table_size_outbound);
 
     // shared_free the temporary parsed rules array
     shared_free(parsed_rules);
@@ -178,12 +187,11 @@ int parse_int(const char *str)
     return (int)val;
 }
 
-
 #endif
 
 #ifndef __KERNEL__
 // Helper function to parse IP address
-int parse_ip(const char *ip, char *output)
+int parse_ip(const char *ip, SHARED_UINT32 *ip_res)
 {
     char *token;
     char *rest = strdup(ip);
@@ -205,7 +213,7 @@ int parse_ip(const char *ip, char *output)
                 shared_free(rest);
                 return -1;
             }
-            output[i] = (char)res;
+            ((char *)ip_res)[i] = (char)res;
         }
         i++;
     }
@@ -215,12 +223,12 @@ int parse_ip(const char *ip, char *output)
 }
 #else
 
-int parse_ip(const char *ip, u8 *output)
+int parse_ip(const char *ip, SHARED_UINT32 *output)
 {
     char *rest;
     char *temp;
     int res;
-    
+
     // Validate input
     if (!ip || !output)
         return -EINVAL; // Return -EINVAL for invalid argument
@@ -232,24 +240,27 @@ int parse_ip(const char *ip, u8 *output)
 
     // Use strtok to tokenize the string
     rest = temp;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++)
+    {
         char *token = strsep(&rest, ".");
-        
-        if (!token) {
+
+        if (!token)
+        {
             shared_free(temp); // Free allocated memory before returning
-            return -EINVAL; // Return -EINVAL for incorrect format
+            return -EINVAL;    // Return -EINVAL for incorrect format
         }
 
         res = parse_int(token);
-        if (res < 0 || res > 255) {
+        if (res < 0 || res > 255)
+        {
             shared_free(temp);
             return -1; // Invalid value
         }
-        output[i] = (u8)res; // Store the result in the output array
+        ((u8 *)output)[i] = (u8)res; // Store the result in the output array
     }
 
     shared_free(temp); // Free allocated memory
-    return 0; // Success
+    return 0;          // Success
 }
 
 #endif
@@ -277,16 +288,11 @@ int parse_port_range(const char *port_str)
 // Helper function to parse port range
 int parse_port_range(const char *port_str)
 {
-    char port[MAX_PORT_LENGTH];
-    strncpy(port, port_str, MAX_PORT_LENGTH - 1);
-    port[MAX_PORT_LENGTH - 1] = '\0';  // Ensure null-termination
 
-    // Convert the port string to an integer and validate
-    char *endptr;
-    unsigned long port_num = simple_strtoul(port, &endptr, 10);
-
+    int port_num = parse_int(port_str);
+    shared_print("parse: port %d,\n", port_num);
     // Check if the conversion was successful and if we parsed the whole string
-    if (*endptr != '\0' || port_num > 65535)
+    if (port_num > 65535 || port_num < 0)
     {
         return -1; // Invalid port
     }
@@ -351,7 +357,6 @@ char *extract_value(const char *json, const char *key)
 
     return value;
 }
-
 
 // Function to parse the list of JSON-like objects
 fire_Rule *parse_json_list(char *input, int count)
@@ -511,9 +516,9 @@ fire_Rule parse_json_to_rule(char *json_string)
     value = extract_value(json_string, "source_address");
     if (value)
     {
-        parse_error = parse_ip(value, rule.source_addresses);
+        parse_error = parse_ip(value, &(rule.source_addresses));
         shared_free(value);
-        if (parse_error == -1)
+        if (parse_error < 0)
         {
             rule.id = -1;
             shared_print("error parsing source ip range");
@@ -539,9 +544,9 @@ fire_Rule parse_json_to_rule(char *json_string)
     value = extract_value(json_string, "destination_address");
     if (value)
     {
-        parse_ip(value, rule.destination_addresses);
+        parse_error = parse_ip(value, &(rule.destination_addresses));
         shared_free(value);
-        if (parse_error == -1)
+        if (parse_error < 0)
         {
             rule.id = -1;
             shared_print("error parsing dest ip address range");
