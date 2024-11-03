@@ -1,5 +1,10 @@
-#include "stdafx.h"
-#include "Rule.h"
+#include <linux/module.h> /* Needed by all modules */
+#include <linux/kernel.h>
+MODULE_LICENSE("GPL");
+#include "Head/stdafx.h"
+#include "Rule/t.h"
+#include "Rule/Rule.h"
+
 typedef struct
 {
     /* User fills in from here down. */
@@ -39,6 +44,13 @@ unsigned int nf_out_hook(void *priv,
 static struct nf_hook_ops *nf_init_block_ops = NULL;
 static struct nf_hook_ops *nf_pre_route_block_ops = NULL;
 
+static void RunTests(void)
+{
+    shared_print(KERN_INFO "firemod: starting tests in kernel!");
+   // Testy1();
+    shared_print(KERN_INFO "firemod: end of tests in kernel!");
+}
+
 static int __init hello_init(void)
 {
     // allocate mem for ops structs
@@ -66,7 +78,11 @@ static int __init hello_init(void)
 
         nf_register_net_hook(&init_net, nf_pre_route_block_ops);
     }
-    printk(KERN_INFO "firemod: Hello, world\n");
+    shared_print(KERN_INFO "firemod: Hello, world1\n");
+
+    shared_print(KERN_INFO "firemod: calling tests in kernel!\n");
+    RunTests();
+
     return 0;
 }
 
@@ -75,16 +91,16 @@ static void __exit hello_exit(void)
     if (nf_init_block_ops != NULL)
     {
         nf_unregister_net_hook(&init_net, nf_init_block_ops);
-        kfree(nf_init_block_ops);
+        shared_free(nf_init_block_ops);
     }
 
     if (nf_pre_route_block_ops != NULL)
     {
         nf_unregister_net_hook(&init_net, nf_pre_route_block_ops);
-        kfree(nf_pre_route_block_ops);
+        shared_free(nf_pre_route_block_ops);
     }
 
-    printk(KERN_INFO "firemod:Goodbye, world\n");
+    shared_print(KERN_INFO "firemod:Goodbye, world\n");
 }
 
 #define ALLOWED_IP "192.168.1.61"
@@ -120,19 +136,19 @@ unsigned int nf_in_callback(void *priv,
 
         if (iph->saddr != specific_ip)
         {
-            printk(KERN_INFO "firemod: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+            shared_print(KERN_INFO "firemod: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
         else
         {
-            printk(KERN_INFO "firemod: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+            shared_print(KERN_INFO "firemod: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         }
         if (tcph->dest == 1234)
         {
-            printk(KERN_INFO "firemod: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+            shared_print(KERN_INFO "firemod: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
-        printk(KERN_INFO "firemod: accepted packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+        shared_print(KERN_INFO "firemod: accepted packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         return NF_ACCEPT; // drop TCP packet
     }
     return NF_DROP;
@@ -171,19 +187,19 @@ unsigned int nf_in_callback_dropper(void *priv,
 
         if (iph->saddr != specific_ip)
         {
-            printk(KERN_INFO "firemod: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+            shared_print(KERN_INFO "firemod: ip_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
         else
         {
-            printk(KERN_INFO "firemod: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+            shared_print(KERN_INFO "firemod: ip_accept packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         }
         if (tcph->dest == 1234)
         {
-            printk(KERN_INFO "firemod: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+            shared_print(KERN_INFO "firemod: port_dropped packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
             return NF_DROP; // drop TCP packet
         }
-        printk(KERN_INFO "firemod: accepted packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
+        shared_print(KERN_INFO "firemod: accepted packet. src %s:%d, dst %s:%d\n", src_ip, tcph->source, dst_ip, tcph->dest);
         return NF_ACCEPT; // drop TCP packet
     }
     return NF_DROP;
@@ -198,7 +214,7 @@ unsigned int nf_in_callback_informer(void *priv,
     struct iphdr *iph; // IP header
     struct tcphdr *tcph;
     struct sock *sk;
-    pid_t pid=0;
+    pid_t pid = 0;
 
     if (!skb)
         return NF_ACCEPT;
@@ -213,9 +229,9 @@ unsigned int nf_in_callback_informer(void *priv,
         sk = skb->sk;
         if (sk && sk->sk_socket && sk->sk_socket->file)
         {
-            pid=pid_vnr(sk->sk_socket->file->f_owner.pid);
+            pid = pid_vnr(sk->sk_socket->file->f_owner.pid);
         }
-        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d LOCAL_IN, pid: %d\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest),pid);
+        shared_print(KERN_INFO "firemod: inform src %s:%d, dst %s:%d LOCAL_IN, pid: %d\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest), pid);
     }
     return NF_ACCEPT;
 }
@@ -229,7 +245,6 @@ unsigned int nf_pre_routing_callback_informer(void *priv,
     struct iphdr *iph; // IP header
     struct tcphdr *tcph;
 
-    
     if (!skb)
         return NF_ACCEPT;
 
@@ -240,11 +255,10 @@ unsigned int nf_pre_routing_callback_informer(void *priv,
     {
         tcph = tcp_hdr(skb);
 
-        printk(KERN_INFO "firemod: inform src %s:%d, dst %s:%d PRE_ROUTING\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest));
+        shared_print(KERN_INFO "firemod: inform src %s:%d, dst %s:%d PRE_ROUTING\n", src_ip, ntohs(tcph->source), dst_ip, ntohs(tcph->dest));
     }
     return NF_ACCEPT;
 }
 module_init(hello_init);
 module_exit(hello_exit);
 
-MODULE_LICENSE("GPL");

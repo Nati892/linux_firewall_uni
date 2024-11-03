@@ -45,51 +45,66 @@ fire_BOOL ParseRules(char *in_json,
 
     // Count the total number of rules in JSON input
     int rule_count = GetRuleCount(in_json, length);
-    if (rule_count < 0) {
-        printf("Error: Could not count rules in JSON\n");
+    if (rule_count < 0)
+    {
+        shared_print("Error: Could not count rules in JSON");
         return fire_FALSE;
     }
 
     // Parse JSON input into a temporary list of rules
     fire_Rule *parsed_rules = parse_json_list(in_json, rule_count);
-    if (parsed_rules == NULL) {
-        printf("Error: Failed to parse JSON input\n");
+    if (parsed_rules == NULL)
+    {
+        shared_print("Error: Failed to parse JSON input");
         return fire_FALSE;
     }
 
     // First pass: Count inbound and outbound rules
-    for (int i = 0; i < rule_count; i++) {
-        if (parsed_rules[i].direction == fire_dir_INBOUND) {
+    for (int i = 0; i < rule_count; i++)
+    {
+        if (parsed_rules[i].direction == fire_dir_INBOUND)
+        {
             inbound_count++;
-        } else if (parsed_rules[i].direction == fire_dir_OUTBOUND) {
+        }
+        else if (parsed_rules[i].direction == fire_dir_OUTBOUND)
+        {
             outbound_count++;
-        } else {
-            printf("Error: Invalid rule direction\n");
-            free(parsed_rules);
+        }
+        else
+        {
+            shared_print("Error: Invalid rule direction");
+            shared_free(parsed_rules);
             return fire_FALSE;
         }
     }
 
     // Allocate memory for inbound and outbound rule tables based on counts
-    *rule_table_inbound = (fire_Rule *)malloc(inbound_count * sizeof(fire_Rule));
-    *rule_table_outbound = (fire_Rule *)malloc(outbound_count * sizeof(fire_Rule));
+    *rule_table_inbound = (fire_Rule *)shared_malloc(inbound_count * sizeof(fire_Rule));
+    *rule_table_outbound = (fire_Rule *)shared_malloc(outbound_count * sizeof(fire_Rule));
 
     // Check if allocations were successful
-    if (*rule_table_inbound == NULL || *rule_table_outbound == NULL) {
-        printf("Error: Memory allocation failed\n");
-        free(parsed_rules);
-        if (*rule_table_inbound) free(*rule_table_inbound);
-        if (*rule_table_outbound) free(*rule_table_outbound);
+    if (*rule_table_inbound == NULL || *rule_table_outbound == NULL)
+    {
+        shared_print("Error: Memory allocation failed");
+        shared_free(parsed_rules);
+        if (*rule_table_inbound)
+            shared_free(*rule_table_inbound);
+        if (*rule_table_outbound)
+            shared_free(*rule_table_outbound);
         return fire_FALSE;
     }
 
     // Second pass: Populate inbound and outbound tables
     int inbound_index = 0;
     int outbound_index = 0;
-    for (int i = 0; i < rule_count; i++) {
-        if (parsed_rules[i].direction == fire_dir_INBOUND) {
+    for (int i = 0; i < rule_count; i++)
+    {
+        if (parsed_rules[i].direction == fire_dir_INBOUND)
+        {
             (*rule_table_inbound)[inbound_index++] = parsed_rules[i];
-        } else if (parsed_rules[i].direction == fire_dir_OUTBOUND) {
+        }
+        else if (parsed_rules[i].direction == fire_dir_OUTBOUND)
+        {
             (*rule_table_outbound)[outbound_index++] = parsed_rules[i];
         }
     }
@@ -98,21 +113,20 @@ fire_BOOL ParseRules(char *in_json,
     *table_size_inbound = inbound_count;
     *table_size_outbound = outbound_count;
 
-    // Free the temporary parsed rules array
-    free(parsed_rules);
+    // shared_free the temporary parsed rules array
+    shared_free(parsed_rules);
 
     // Return success after populating both tables
     return fire_TRUE;
 }
 
-
-__uint32_t char_array_to_u32(const char ip[4])
+SHARED_UINT32 char_array_to_u32(const char ip[4])
 {
     // Combine bytes into a __u32
-    return ((__uint32_t)(unsigned char)ip[0] << 24) |
-           ((__uint32_t)(unsigned char)ip[1] << 16) |
-           ((__uint32_t)(unsigned char)ip[2] << 8) |
-           ((__uint32_t)(unsigned char)ip[3]);
+    return ((SHARED_UINT32)(unsigned char)ip[0] << 24) |
+           ((SHARED_UINT32)(unsigned char)ip[1] << 16) |
+           ((SHARED_UINT32)(unsigned char)ip[2] << 8) |
+           ((SHARED_UINT32)(unsigned char)ip[3]);
 }
 
 // Helper function to safely copy strings
@@ -127,7 +141,7 @@ size_t safe_strcpy(char *dest, size_t destsize, const char *src)
     dest[len] = '\0';
     return len;
 }
-
+#ifndef __KERNEL__
 // Helper function to parse a single integer
 int parse_int(const char *str)
 {
@@ -137,13 +151,37 @@ int parse_int(const char *str)
 
     if (errno != 0 || endptr == str || *endptr != '\0' || val > INT_MAX || val < INT_MIN)
     {
-        printf("error parsing int");
+        shared_print("error parsing int");
         return -1; // Return 0 on error
     }
 
     return (int)val;
 }
+#else
 
+// Helper function to parse a single integer
+int parse_int(const char *str)
+{
+    char *endptr;
+    long val;
+
+    // Use simple_strtol for kernel space
+    val = simple_strtol(str, &endptr, 10);
+
+    // Check for errors
+    if (endptr == str || *endptr != '\0' || val > INT_MAX || val < INT_MIN)
+    {
+        shared_print(KERN_ERR "error parsing int: invalid input '%s'", str);
+        return -1; // Return -EINVAL for invalid argument
+    }
+
+    return (int)val;
+}
+
+
+#endif
+
+#ifndef __KERNEL__
 // Helper function to parse IP address
 int parse_ip(const char *ip, char *output)
 {
@@ -157,14 +195,14 @@ int parse_ip(const char *ip, char *output)
         if (i < 4)
         {
             int res = parse_int(token);
-            if (res < 0 || res > 65535)
+            if (res < 0 || res > 255)
             {
-                free(rest);
+                shared_free(rest);
                 return -1;
             }
             if (res < -1)
             {
-                free(rest);
+                shared_free(rest);
                 return -1;
             }
             output[i] = (char)res;
@@ -172,63 +210,97 @@ int parse_ip(const char *ip, char *output)
         i++;
     }
 
-    free(rest);
+    shared_free(rest);
     return 0;
 }
+#else
 
-// Helper function to parse IP address range
-int parse_ip_range(const char *ip_range, char *output)
+int parse_ip(const char *ip, u8 *output)
 {
-    char start_ip[MAX_IP_LENGTH], end_ip[MAX_IP_LENGTH];
-    const char *delimiter = strchr(ip_range, '-');
+    char *rest;
+    char *temp;
+    int res;
+    
+    // Validate input
+    if (!ip || !output)
+        return -EINVAL; // Return -EINVAL for invalid argument
 
-    if (delimiter)
-    {
-        size_t start_len = delimiter - ip_range;
-        safe_strcpy(start_ip, sizeof(start_ip), ip_range);
-        start_ip[start_len] = '\0';
-        safe_strcpy(end_ip, sizeof(end_ip), delimiter + 1);
-    }
-    else
-    {
-        safe_strcpy(start_ip, sizeof(start_ip), ip_range);
-        safe_strcpy(end_ip, sizeof(end_ip), ip_range);
+    // Duplicate the string using kstrdup
+    temp = kstrdup(ip, GFP_KERNEL);
+    if (!temp)
+        return -ENOMEM; // Return -ENOMEM for memory allocation failure
+
+    // Use strtok to tokenize the string
+    rest = temp;
+    for (int i = 0; i < 4; i++) {
+        char *token = strsep(&rest, ".");
+        
+        if (!token) {
+            shared_free(temp); // Free allocated memory before returning
+            return -EINVAL; // Return -EINVAL for incorrect format
+        }
+
+        res = parse_int(token);
+        if (res < 0 || res > 255) {
+            shared_free(temp);
+            return -1; // Invalid value
+        }
+        output[i] = (u8)res; // Store the result in the output array
     }
 
-    if (parse_ip(start_ip, output) == -1 || parse_ip(end_ip, output + 4) == -1)
-    {
-        return -1;
-    }
-
-    return 0;
+    shared_free(temp); // Free allocated memory
+    return 0; // Success
 }
 
+#endif
+
+#ifndef __KERNEL__
 // Helper function to parse port range
-int parse_port_range(const char *port_range)
+int parse_port_range(const char *port_str)
 {
-    char start_port[MAX_PORT_LENGTH], end_port[MAX_PORT_LENGTH];
-    const char *delimiter = strchr(port_range, '-');
+    char port[MAX_PORT_LENGTH];
+    strncpy(port, port_str, MAX_PORT_LENGTH - 1);
+    port[MAX_PORT_LENGTH - 1] = '\0';
 
-    if (delimiter)
+    // Convert the port string to an integer and validate
+    int port_num = atoi(port);
+
+    if (port_num < 0 || port_num > 65535)
     {
-        size_t start_len = delimiter - port_range;
-        safe_strcpy(start_port, sizeof(start_port), port_range);
-        start_port[start_len] = '\0';
-        safe_strcpy(end_port, sizeof(end_port), delimiter + 1);
-    }
-    else
-    {
-        safe_strcpy(start_port, sizeof(start_port), port_range);
-        safe_strcpy(end_port, sizeof(end_port), port_range);
+        return -1; // Invalid port
     }
 
-    return parse_int(start_port); // For simplicity, we're just returning the start of the range
+    return port_num; // Return the validated port
 }
 
-// Helper function to extract value from JSON string
+#else
+// Helper function to parse port range
+int parse_port_range(const char *port_str)
+{
+    char port[MAX_PORT_LENGTH];
+    strncpy(port, port_str, MAX_PORT_LENGTH - 1);
+    port[MAX_PORT_LENGTH - 1] = '\0';  // Ensure null-termination
+
+    // Convert the port string to an integer and validate
+    char *endptr;
+    unsigned long port_num = simple_strtoul(port, &endptr, 10);
+
+    // Check if the conversion was successful and if we parsed the whole string
+    if (*endptr != '\0' || port_num > 65535)
+    {
+        return -1; // Invalid port
+    }
+
+    return (int)port_num; // Return the validated port
+}
+#endif
+
+// Assuming shared_malloc and safe_strcpy are defined elsewhere
+
 char *extract_value(const char *json, const char *key)
 {
     char search_key[256];
+    // Format the search key to match the JSON key format
     snprintf(search_key, sizeof(search_key), "\"%s\":", key);
 
     const char *start = strstr(json, search_key);
@@ -269,23 +341,27 @@ char *extract_value(const char *json, const char *key)
         return NULL;
 
     size_t length = end - start;
-    char *value = (char *)malloc(length + 1);
+    char *value = (char *)shared_malloc(length + 1);
     if (value == NULL)
         return NULL;
 
+    // Use a safe string copy function
     safe_strcpy(value, length + 1, start);
+    value[length] = '\0'; // Null-terminate the value
+
     return value;
 }
+
 
 // Function to parse the list of JSON-like objects
 fire_Rule *parse_json_list(char *input, int count)
 {
     char *p = input;
-    int rule_index=0;
-    fire_Rule *rule_array = (fire_Rule *)malloc(sizeof(fire_Rule) * count);
+    int rule_index = 0;
+    fire_Rule *rule_array = (fire_Rule *)shared_malloc(sizeof(fire_Rule) * count);
     if (rule_array == NULL)
     {
-        printf("Error: failed to allocate array size\n");
+        shared_print("Error: failed to allocate array size");
         return NULL;
     }
     // Skip leading whitespace
@@ -295,8 +371,8 @@ fire_Rule *parse_json_list(char *input, int count)
     // Ensure the string starts with '['
     if (*p != '[')
     {
-        printf("Error: Input doesn't start with '['\n");
-        free(rule_array);
+        shared_print("Error: Input doesn't start with '['");
+        shared_free(rule_array);
         return NULL;
     }
     p++;
@@ -316,8 +392,8 @@ fire_Rule *parse_json_list(char *input, int count)
 
         if (*p != '{')
         {
-            printf("Error: Expected '{' at position %ld\n", p - input);
-            free(rule_array);
+            shared_print("Error: Expected '{' at position %ld", p - input);
+            shared_free(rule_array);
             return NULL;
         }
 
@@ -335,18 +411,18 @@ fire_Rule *parse_json_list(char *input, int count)
 
         if (brace_count != 0)
         {
-            printf("Error: Unmatched braces\n");
-            free(rule_array);
+            shared_print("Error: Unmatched braces");
+            shared_free(rule_array);
             return NULL;
         }
 
         // Copy this JSON object to a new string
         size_t obj_len = end - p;
-        char *obj = malloc(obj_len + 1);
+        char *obj = shared_malloc(obj_len + 1);
         if (obj == NULL)
         {
-            printf("Error: Memory allocation failed\n");
-            free(rule_array);
+            shared_print("Error: Memory allocation failed");
+            shared_free(rule_array);
             return NULL;
         }
         strncpy(obj, p, obj_len);
@@ -355,19 +431,18 @@ fire_Rule *parse_json_list(char *input, int count)
         // Process this JSON object
         fire_Rule rule = parse_json_to_rule(obj);
 
-        // Free the memory
-        free(obj);
+        // shared_free the memory
+        shared_free(obj);
 
         if (rule.id < 0) // error here
         {
-            free(rule_array);
-            printf("Error: Input with rule id parsing%d\n", rule.id);
+            shared_free(rule_array);
+            shared_print("Error: Input with rule id parsing%d", rule.id);
             return NULL;
         }
-       
 
-            rule_array[rule_index] = rule;
-            rule_index++;
+        rule_array[rule_index] = rule;
+        rule_index++;
         // Move to the next object
         p = end;
 
@@ -382,8 +457,8 @@ fire_Rule *parse_json_list(char *input, int count)
         }
         else if (*p != ']')
         {
-            printf("Error: Expected ',' or ']' at position %ld\n", p - input);
-            free(rule_array);
+            shared_print("Error: Expected ',' or ']' at position %ld", p - input);
+            shared_free(rule_array);
             return NULL;
         }
     }
@@ -391,8 +466,8 @@ fire_Rule *parse_json_list(char *input, int count)
     // Ensure the string ends with ']'
     if (*p != ']')
     {
-        printf("Error: Input doesn't end with ']'\n");
-        free(rule_array);
+        shared_print("Error: Input doesn't end with ']'");
+        shared_free(rule_array);
         return NULL;
     }
 
@@ -404,12 +479,12 @@ fire_Rule *parse_json_list(char *input, int count)
     // Ensure we've reached the end of the string
     if (*p != '\0')
     {
-        printf("Error: Unexpected characters after closing ']'\n");
-        free(rule_array);
+        shared_print("Error: Unexpected characters after closing ']'");
+        shared_free(rule_array);
         return NULL;
     }
 
-    printf("Parsing completed successfully\n");
+    shared_print("Parsing completed successfully");
     return rule_array;
 }
 
@@ -424,10 +499,10 @@ fire_Rule parse_json_to_rule(char *json_string)
     if (value)
     {
         rule.id = parse_int(value);
-        free(value);
+        shared_free(value);
         if (rule.id < 0)
         {
-            printf("error parsing id\n");
+            shared_print("error parsing id");
             return rule;
         }
     }
@@ -436,12 +511,12 @@ fire_Rule parse_json_to_rule(char *json_string)
     value = extract_value(json_string, "source_address");
     if (value)
     {
-        parse_error = parse_ip_range(value, rule.source_addresses);
-        free(value);
+        parse_error = parse_ip(value, rule.source_addresses);
+        shared_free(value);
         if (parse_error == -1)
         {
             rule.id = -1;
-            printf("error parsing source ip range\n");
+            shared_print("error parsing source ip range");
             return rule;
         }
     }
@@ -451,11 +526,11 @@ fire_Rule parse_json_to_rule(char *json_string)
     if (value)
     {
         rule.source_port = parse_port_range(value);
-        free(value);
+        shared_free(value);
         if (rule.source_port == -1)
         {
             rule.id = -1;
-            printf("error parsing source port\n");
+            shared_print("error parsing source port");
             return rule;
         }
     }
@@ -464,12 +539,12 @@ fire_Rule parse_json_to_rule(char *json_string)
     value = extract_value(json_string, "destination_address");
     if (value)
     {
-        parse_ip_range(value, rule.destination_addresses);
-        free(value);
+        parse_ip(value, rule.destination_addresses);
+        shared_free(value);
         if (parse_error == -1)
         {
             rule.id = -1;
-            printf("error parsing dest ip address range\n");
+            shared_print("error parsing dest ip address range");
             return rule;
         }
     }
@@ -479,11 +554,11 @@ fire_Rule parse_json_to_rule(char *json_string)
     if (value)
     {
         rule.destination_port = parse_port_range(value);
-        free(value);
+        shared_free(value);
         if (rule.destination_port == -1)
         {
             rule.id = -1;
-            printf("error parsing dest port address range");
+            shared_print("error parsing dest port address range");
             return rule;
         }
     }
@@ -501,11 +576,11 @@ fire_Rule parse_json_to_rule(char *json_string)
         else
         {
             rule.id = -1;
-            free(value);
-            printf("error parsing protocol\n");
+            shared_free(value);
+            shared_print("error parsing protocol");
             return rule;
         }
-        free(value);
+        shared_free(value);
     }
 
     // Parse action
@@ -519,11 +594,11 @@ fire_Rule parse_json_to_rule(char *json_string)
         else
         {
             rule.id = -1;
-            free(value);
-            printf("error parsing action\n");
+            shared_free(value);
+            shared_print("error parsing action");
             return rule;
         }
-        free(value);
+        shared_free(value);
     }
 
     // Parse direction
@@ -537,11 +612,11 @@ fire_Rule parse_json_to_rule(char *json_string)
         else
         {
             rule.id = -1;
-            free(value);
-            printf("error parsing diraction\n");
+            shared_free(value);
+            shared_print("error parsing diraction");
             return rule;
         }
-        free(value);
+        shared_free(value);
     }
 
     // Parse enabled
@@ -555,8 +630,8 @@ fire_Rule parse_json_to_rule(char *json_string)
         else
         {
             rule.id = -1;
-            free(value);
-            printf("error parsing enabled \n");
+            shared_free(value);
+            shared_print("error parsing enabled ");
             return rule;
         }
     }

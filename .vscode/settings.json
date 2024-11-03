@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "rule_tests.h": "c",
+        "rule.h": "c",
+        "ruleparser.h": "c",
+        "t.h": "c",
+        "stdafx.h": "c",
+        "module.h": "c",
+        "types.h": "c"
+    }
+}

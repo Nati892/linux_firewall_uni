@@ -1,11 +1,6 @@
 #ifndef RULE_H
 #define RULE_H
-
-#ifdef __KERNEL__
-#include <linux/types.h>  // For kernel types
-#else
-#include <stdint.h>       // For standard types in user space
-#endif
+#include "../Head/stdafx.h"
 
 
 // Boolean type definition

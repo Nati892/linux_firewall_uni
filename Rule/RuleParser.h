@@ -1,15 +1,10 @@
 #ifndef RULEPARSER_H
 #define RULEPARSER_H
 
-#define MAX_IP_LENGTH 32
-#define MAX_PORT_LENGTH 16
+#define MAX_IP_LENGTH 16
+#define MAX_PORT_LENGTH 6
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <errno.h>
-#include <limits.h>
+#include "../Head/stdafx.h"
 #include "Rule.h"
 
 int GetRuleCount(char *in_json, int length);
