@@ -2,24 +2,103 @@
 
 // Define the variables here
 struct mutex current_config_mutex;
+struct mutex current_config_pending_change_mutex;
 struct mutex current_running_mutex;
 fire_Rule *running_table_in;
 int running_table_in_amount;
 fire_Rule *running_table_out;
 int running_table_out_amount;
+file_data pending_config;
 
-// Save new configuration data to file and update running config
+void print_current_file_contents(const char *context)
+{
+        struct file *filp;
+        file_data *content;
+
+        shared_print("%s: Reading current file contents...\n", context);
+
+        filp = filp_open(CONFIG_FILE, O_RDONLY, 0);
+        if (IS_ERR(filp))
+        {
+                shared_print("%s: Failed to open config file for reading\n", context);
+                return;
+        }
+
+        content = read_entire_file(filp);
+        filp_close(filp, NULL);
+
+        if (content)
+        {
+                shared_print("%s: Current file contents (%d bytes): %.*s\n",
+                             context, content->size, content->size, (char *)content->data);
+                free_file_data(content);
+        }
+        else
+        {
+                shared_print("%s: Failed to read file contents\n", context);
+        }
+}
+
+void print_current_creds(const char *context)
+{
+        const struct cred *creds = current_cred();
+        shared_print("%s: uid=%u euid=%u\n",
+                     context,
+                     from_kuid(&init_user_ns, creds->uid),
+                     from_kuid(&init_user_ns, creds->euid));
+}
+
+void validate_pending_config(void)
+{
+        file_data new_data;
+
+        shared_print("timer: checking pending config\n");
+
+        mutex_lock(&current_config_pending_change_mutex);
+
+        if (pending_config.data == NULL || pending_config.size <= 0)
+        {
+                mutex_unlock(&current_config_pending_change_mutex);
+                return;
+        }
+
+        shared_print("timer: found pending config of size %d\n", pending_config.size);
+
+        // Take ownership of the pending data
+        new_data.data = pending_config.data;
+        new_data.size = pending_config.size;
+
+        // Clear pending config
+        pending_config.data = NULL;
+        pending_config.size = 0;
+
+        mutex_unlock(&current_config_pending_change_mutex);
+
+        // Process the config
+        shared_print("timer: processing pending config\n");
+        save_new_config(&new_data);
+
+        // Clean up
+        kfree(new_data.data);
+}
+
 int save_new_config(file_data *data)
 {
         struct file *filp;
         loff_t pos = 0;
         int ret;
 
+        print_current_creds("save_new_config");
+
         if (!data || !data->data || data->size <= 0)
         {
                 shared_print("config: Invalid configuration data\n");
                 return -EINVAL;
         }
+
+        // Print what we're about to write
+        shared_print("config: Attempting to write data (%d bytes): %.*s\n",
+                     data->size, data->size, (char *)data->data);
 
         // First verify the new configuration is valid
         fire_Rule *table_in = NULL;
@@ -34,45 +113,56 @@ int save_new_config(file_data *data)
                 return -EINVAL;
         }
 
-        // Lock both mutexes to ensure atomic update of file and running config
+        shared_print("config: Parsed new config successfully: in=%d, out=%d\n",
+                     in_amount, out_amount);
+
         mutex_lock(&current_config_mutex);
 
         // Open and truncate the config file
-        filp = filp_open(CONFIG_FILE, O_WRONLY | O_CREAT, 0644);
+        filp = filp_open(CONFIG_FILE2, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (IS_ERR(filp))
         {
+                long error = PTR_ERR(filp);
                 mutex_unlock(&current_config_mutex);
-                shared_print("config: Failed to open config file for writing\n");
-                // Free the temporary tables
+                shared_print("config: Failed to create config file. Error: %ld (%pe)\n",
+                             error, filp);
                 kfree(table_in);
                 kfree(table_out);
                 return PTR_ERR(filp);
         }
+        else
+        {
+                shared_print("config: success to open config file");
+        }
 
-        // Write the new configuration
-        ret = kernel_write(filp, data->data, data->size, &pos);
+        // Write the actual new configuration data
+        ret = kernel_write(filp, DEFAULT_NEW_CONFIG, strlen(DEFAULT_NEW_CONFIG), &pos);
         filp_close(filp, NULL);
 
         if (ret < 0)
         {
                 mutex_unlock(&current_config_mutex);
                 shared_print("config: Failed to write new configuration\n");
-                // Free the temporary tables
                 kfree(table_in);
                 kfree(table_out);
                 return ret;
         }
+        else
+        {
+                shared_print("config: Successfully wrote %d bytes to file\n", ret);
+        }
 
-        // Update the running configuration
         mutex_unlock(&current_config_mutex);
 
+        // Read back and print the contents to verify the write
+        print_current_file_contents("save_new_config");
+
+        // Update running configuration
         mutex_lock(&current_running_mutex);
 
-        // Free old configuration if it exists
         kfree(running_table_in);
         kfree(running_table_out);
 
-        // Update with new configuration
         running_table_in = table_in;
         running_table_in_amount = in_amount;
         running_table_out = table_out;
@@ -188,7 +278,7 @@ file_data *load_config_file_data(void)
         struct file *filp;
         file_data *content = NULL;
 
-        filp = filp_open(CONFIG_FILE, O_WRONLY | O_CREAT, 0644);
+        filp = filp_open(CONFIG_FILE, O_RDONLY | O_CREAT, 0644);
         if (IS_ERR(filp))
         {
                 shared_print("config: Failed to open config file\n");
@@ -226,6 +316,7 @@ int delete_config_file(void)
         shared_print("config: File cleared successfully\n");
         return 0;
 }
+
 // Create config with default data
 int set_default_config_file_data(void)
 {
@@ -233,7 +324,8 @@ int set_default_config_file_data(void)
         loff_t pos = 0;
         int ret;
 
-        filp = filp_open(CONFIG_FILE, O_WRONLY | O_CREAT, 0644);
+        // Need to truncate the file by using O_TRUNC
+        filp = filp_open(CONFIG_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (IS_ERR(filp))
         {
                 shared_print("config: Failed to create config file\n");
@@ -295,18 +387,21 @@ static int reset_config(void)
 
 void init_config_file(void)
 {
+        print_current_creds("init_config_file");
         file_data *config;
         int ret = 0;
         bool need_default = false;
 
+        // init global variables
         running_table_in = NULL;
         running_table_in_amount = 0;
         running_table_out = NULL;
         running_table_out_amount = 0;
-
+        pending_config.data = NULL;
+        pending_config.size = 0;
         mutex_init(&current_config_mutex);
         mutex_init(&current_running_mutex);
-
+        mutex_init(&current_config_pending_change_mutex);
         // First try to load existing config
         config = load_config_file_data();
         if (config != NULL)
@@ -317,8 +412,6 @@ void init_config_file(void)
 
                 if (ret != 0)
                 {
-                        // do_something failed, need to reset config
-                        shared_print("config: do_something failed, resetting config\n");
                         delete_config_file();
                         need_default = true;
                 }
@@ -371,4 +464,5 @@ void cleanup_config(void)
 {
         mutex_destroy(&current_config_mutex);
         mutex_destroy(&current_running_mutex);
+        mutex_destroy(&current_config_pending_change_mutex);
 }

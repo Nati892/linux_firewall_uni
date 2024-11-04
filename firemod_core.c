@@ -19,6 +19,20 @@ typedef struct
     int priority; // priority of callback function
 } nf_hook_ops;
 
+// time start
+//  At global scope
+static struct timer_list my_timer;
+static int counter = 0;
+static bool first_run = true;
+
+static void timer_callback_check_config(struct timer_list *t)
+{
+    validate_pending_config();
+    // Reschedule the timer to run again in 1 second
+    mod_timer(&my_timer, jiffies + msecs_to_jiffies(1000));
+}
+// timer end
+
 // ip filter
 unsigned int nf_in_callback(void *priv,
                             struct sk_buff *skb,
@@ -46,7 +60,7 @@ unsigned int nf_out_hook(void *priv,
 static struct nf_hook_ops *nf_init_block_ops = NULL;
 static struct nf_hook_ops *nf_pre_route_block_ops = NULL;
 
- int __init fire_module_init(void)
+int __init fire_module_init(void)
 {
     // allocate mem for ops structs
     nf_init_block_ops = (struct nf_hook_ops *)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
@@ -86,10 +100,13 @@ static struct nf_hook_ops *nf_pre_route_block_ops = NULL;
     {
         shared_print(KERN_INFO "firemod: GOOD INIT FOR NETLINK\n");
     }
+    timer_setup(&my_timer, timer_callback_check_config, 0);
+    mod_timer(&my_timer, jiffies + msecs_to_jiffies(1000));
+
     return 0;
 }
 
- void __exit fire_module_exit(void)
+void __exit fire_module_exit(void)
 {
     if (nf_init_block_ops != NULL)
     {
@@ -106,6 +123,7 @@ static struct nf_hook_ops *nf_pre_route_block_ops = NULL;
     close_netlink();
     cleanup_config();
     shared_print(KERN_INFO "firemod:unloading\n");
+    del_timer_sync(&my_timer);
 }
 
 #define ALLOWED_IP "192.168.1.61"

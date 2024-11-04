@@ -290,7 +290,6 @@ int parse_port_range(const char *port_str)
 {
 
     int port_num = parse_int(port_str);
-    shared_print("parse: port %d,\n", port_num);
     // Check if the conversion was successful and if we parsed the whole string
     if (port_num > 65535 || port_num < 0)
     {
