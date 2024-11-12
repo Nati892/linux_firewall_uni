@@ -5,38 +5,7 @@
 
 // define statements
 #define CONFIG_FILE_PATH "/etc/firemod_config"
-#define CONFIG_FILE_PATH2 "/etc/firemod_config"
 #define DEFAULT_CONFIG "[]"
-#define DEFAULT_NEW_CONFIG "[\
-    {\
-        \"id\": 0,\
-        \"source_address\": \"123.255.255.1\",\
-        \"source_port\": \"80\",\
-        \"destination_address\": \"123.255.255.255\",\
-        \"destination_port\": \"875\",\
-        \"protocol\": \"TCP\",\
-        \"action\": \"ACCEPT\",\
-        \"direction\": \"OUTBOUND\",\
-        \"enabled\": true,\
-        \"description\": \"\"\
-    }\
-]"
-// structs
-
-#define DEFAULT_NEW_CONFIG2 "[\
-    {\
-        \"id\": 0,\
-        \"source_address\": \"123.255.255.2\",\
-        \"source_port\": \"80\",\
-        \"destination_address\": \"123.255.255.255\",\
-        \"destination_port\": \"876\",\
-        \"protocol\": \"TCP\",\
-        \"action\": \"ACCEPT\",\
-        \"direction\": \"OUTBOUND\",\
-        \"enabled\": true,\
-        \"description\": \"\"\
-    }\
-]"
 
 typedef struct
 {

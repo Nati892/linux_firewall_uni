@@ -175,7 +175,7 @@ int save_new_config(file_data *data)
         }
 
         // Create new file with root credentials
-        filp = root_filp_open(CONFIG_FILE_PATH2, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        filp = root_filp_open(CONFIG_FILE_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0600);
         if (IS_ERR(filp))
         {
                 mutex_unlock(&current_config_mutex);
