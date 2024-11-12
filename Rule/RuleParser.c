@@ -47,10 +47,10 @@ fire_BOOL ParseRules(char *in_json,
     int rule_count = GetRuleCount(in_json, length);
     if (rule_count < 0)
     {
-        shared_print("Error: Could not count rules in JSON");
+        shared_print("Parse:Error: Could not count rules in JSON");
         return fire_FALSE;
     }
-    shared_print("Error: total rule count is %d\n", rule_count);
+    shared_print("parse:total rule count is %d\n", rule_count);
 
     // Parse JSON input into a temporary list of rules
     fire_Rule *parsed_rules = parse_json_list(in_json, rule_count);

@@ -7,6 +7,7 @@
 #include "tester/main.h"
 #include "Control/net_control.h"
 #include "Control/mod_config.h"
+
 typedef struct
 {
     /* User fills in from here down. */
@@ -19,19 +20,22 @@ typedef struct
     int priority; // priority of callback function
 } nf_hook_ops;
 
-// time start
-//  At global scope
-static struct timer_list my_timer;
+// Work queue declarations
+static struct workqueue_struct *config_wq;
+static struct delayed_work config_work;
 static int counter = 0;
 static bool first_run = true;
 
-static void timer_callback_check_config(struct timer_list *t)
+// Work handler function
+static void work_handler_check_config(struct work_struct *work)
 {
+    //timer_test();
     validate_pending_config();
-    // Reschedule the timer to run again in 1 second
-    mod_timer(&my_timer, jiffies + msecs_to_jiffies(1000));
+    
+    // Reschedule the work
+    queue_delayed_work(config_wq, container_of(work, struct delayed_work, work), 
+                      msecs_to_jiffies(1000));
 }
-// timer end
 
 // ip filter
 unsigned int nf_in_callback(void *priv,
@@ -88,6 +92,19 @@ int __init fire_module_init(void)
         // nf_register_net_hook(&init_net, nf_pre_route_block_ops);
     }
 
+    // Create dedicated work queue
+    config_wq = create_singlethread_workqueue("firemod_config");
+    if (!config_wq) {
+        shared_print(KERN_INFO "firemod: Failed to create workqueue\n");
+        return -ENOMEM;
+    }
+
+    // Initialize delayed work
+    INIT_DELAYED_WORK(&config_work, work_handler_check_config);
+
+    // Schedule first work
+    queue_delayed_work(config_wq, &config_work, msecs_to_jiffies(1000));
+
     shared_print("firemod kernel module firewall loading\n");
     init_config_file();
 
@@ -100,8 +117,6 @@ int __init fire_module_init(void)
     {
         shared_print(KERN_INFO "firemod: GOOD INIT FOR NETLINK\n");
     }
-    timer_setup(&my_timer, timer_callback_check_config, 0);
-    mod_timer(&my_timer, jiffies + msecs_to_jiffies(1000));
 
     return 0;
 }
@@ -120,10 +135,15 @@ void __exit fire_module_exit(void)
         shared_free(nf_pre_route_block_ops);
     }
 
+    // Cancel pending work and destroy work queue
+    cancel_delayed_work_sync(&config_work);
+    if (config_wq) {
+        destroy_workqueue(config_wq);
+    }
+
     close_netlink();
     cleanup_config();
     shared_print(KERN_INFO "firemod:unloading\n");
-    del_timer_sync(&my_timer);
 }
 
 #define ALLOWED_IP "192.168.1.61"
@@ -144,13 +164,6 @@ unsigned int nf_in_callback(void *priv,
     iph = ip_hdr(skb);
     snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
     snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
-    // retrieve the IP headers from the packet
-    // if(iph->protocol == IPPROTO_UDP) {
-    //	udph = udp_hdr(skb);
-    //	if(ntohs(udph->dest) == 53) {
-    //		return NF_ACCEPT; // accept UDP packet
-    //	}
-    //}
     specific_ip = in_aton(ALLOWED_IP);
 
     if (iph->protocol == IPPROTO_TCP)
@@ -195,13 +208,6 @@ unsigned int nf_in_callback_dropper(void *priv,
     iph = ip_hdr(skb);
     snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
     snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
-    // retrieve the IP headers from the packet
-    // if(iph->protocol == IPPROTO_UDP) {
-    //	udph = udp_hdr(skb);
-    //	if(ntohs(udph->dest) == 53) {
-    //		return NF_ACCEPT; // accept UDP packet
-    //	}
-    //}
     specific_ip = in_aton(ALLOWED_IP);
 
     if (iph->protocol == IPPROTO_TCP)
@@ -282,6 +288,7 @@ unsigned int nf_pre_routing_callback_informer(void *priv,
     }
     return NF_ACCEPT;
 }
+
 module_init(fire_module_init);
 module_exit(fire_module_exit);
 

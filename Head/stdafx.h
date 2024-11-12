@@ -21,6 +21,11 @@
 #include <linux/fs.h>   
 #include <linux/mutex.h>
 #include <linux/inet.h>           // For inet_ntop
+#include <linux/uaccess.h>
+#include <linux/namei.h>
+#include <linux/cred.h>
+#include <linux/mount.h>
+#include <linux/cred.h>
 #else
 // Code that is compiled in user space
 #include <stdint.h> // For standard types in user space

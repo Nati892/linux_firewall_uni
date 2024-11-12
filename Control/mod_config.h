@@ -4,13 +4,29 @@
 #include "../Rule/RuleParser.h"
 
 // define statements
-#define CONFIG_FILE "/etc/firemod_config"
-#define CONFIG_FILE2 "/etc/firemod_config_other"
+#define CONFIG_FILE_PATH "/etc/firemod_config"
+#define CONFIG_FILE_PATH2 "/etc/firemod_config"
 #define DEFAULT_CONFIG "[]"
 #define DEFAULT_NEW_CONFIG "[\
     {\
         \"id\": 0,\
-        \"source_address\": \"123.255.255.254\",\
+        \"source_address\": \"123.255.255.1\",\
+        \"source_port\": \"80\",\
+        \"destination_address\": \"123.255.255.255\",\
+        \"destination_port\": \"875\",\
+        \"protocol\": \"TCP\",\
+        \"action\": \"ACCEPT\",\
+        \"direction\": \"OUTBOUND\",\
+        \"enabled\": true,\
+        \"description\": \"\"\
+    }\
+]"
+// structs
+
+#define DEFAULT_NEW_CONFIG2 "[\
+    {\
+        \"id\": 0,\
+        \"source_address\": \"123.255.255.2\",\
         \"source_port\": \"80\",\
         \"destination_address\": \"123.255.255.255\",\
         \"destination_port\": \"876\",\
@@ -21,12 +37,11 @@
         \"description\": \"\"\
     }\
 ]"
-// structs
 
 typedef struct
 {
-        unsigned char *data;
-        int size;
+    unsigned char *data;
+    int size;
 } file_data;
 
 // Current configuration pending change storage
@@ -49,11 +64,12 @@ void print_config_safe(void);
 static int check_config_file(void);
 file_data *load_config_file_data(void);
 static int reset_config(void); // set to ""
-int set_default_config_file_data(void);
+int set_default_config_file_data(const char *, const char *);
 int delete_config_file(void);
 file_data *read_entire_file(struct file *filp);
 void free_file_data(file_data *file_content);
 void init_config_file(void);
 void cleanup_config(void);
-
+int delete_file(char *);
+void timer_test(void);
 #endif

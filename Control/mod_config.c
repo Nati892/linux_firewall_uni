@@ -1,5 +1,4 @@
 #include "mod_config.h"
-
 // Define the variables here
 struct mutex current_config_mutex;
 struct mutex current_config_pending_change_mutex;
@@ -10,6 +9,64 @@ fire_Rule *running_table_out;
 int running_table_out_amount;
 file_data pending_config;
 
+// Helper function for root credentials
+static struct file *root_filp_open(const char *path, int flags, umode_t mode)
+{
+    struct file *filp;
+    const struct cred *old_cred;
+    struct cred *new_cred;
+
+    new_cred = prepare_creds();
+    if (!new_cred) {
+        return ERR_PTR(-ENOMEM);
+    }
+
+    // Set root ownership
+    new_cred->fsuid = GLOBAL_ROOT_UID;
+    new_cred->fsgid = GLOBAL_ROOT_GID;
+
+    // Install new credentials
+    commit_creds(new_cred);
+    
+    filp = filp_open(path, flags, mode);
+    
+    return filp;
+}
+
+
+int delete_file(char *path) 
+{
+    struct file *check;
+    
+    shared_print("delete file: checking full path: %s\n", path);
+    
+    // Check file with root credentials
+    check = root_filp_open(path, O_RDONLY, 0);
+    if (IS_ERR(check)) {
+        long err = PTR_ERR(check);
+        shared_print("delete file: config file check failed, error: %ld\n", err);
+        if (err == -ENOENT) {
+            shared_print("delete file: the config file does not exist\n");
+        } else if (err == -EACCES) {
+            shared_print("delete file: permission denied accessing config file\n");
+        }
+        return err;
+    }
+    
+    shared_print("delete file: config file exists and is accessible\n");
+    filp_close(check, NULL);
+
+    // Try to delete the file with root credentials
+    check = root_filp_open(path, O_WRONLY | O_TRUNC, 0);
+    if (!IS_ERR(check)) {
+        filp_close(check, NULL);
+        shared_print("delete file: successfully truncated file\n");
+        return 0;
+    }
+    
+    return PTR_ERR(check);
+}
+
 void print_current_file_contents(const char *context)
 {
         struct file *filp;
@@ -17,7 +74,7 @@ void print_current_file_contents(const char *context)
 
         shared_print("%s: Reading current file contents...\n", context);
 
-        filp = filp_open(CONFIG_FILE, O_RDONLY, 0);
+        filp = filp_open(CONFIG_FILE_PATH, O_RDONLY, 0);
         if (IS_ERR(filp))
         {
                 shared_print("%s: Failed to open config file for reading\n", context);
@@ -39,15 +96,6 @@ void print_current_file_contents(const char *context)
         }
 }
 
-void print_current_creds(const char *context)
-{
-        const struct cred *creds = current_cred();
-        shared_print("%s: uid=%u euid=%u\n",
-                     context,
-                     from_kuid(&init_user_ns, creds->uid),
-                     from_kuid(&init_user_ns, creds->euid));
-}
-
 void validate_pending_config(void)
 {
         file_data new_data;
@@ -58,11 +106,12 @@ void validate_pending_config(void)
 
         if (pending_config.data == NULL || pending_config.size <= 0)
         {
+                shared_print("validate_pending_config: no pending config found");
                 mutex_unlock(&current_config_pending_change_mutex);
                 return;
         }
 
-        shared_print("timer: found pending config of size %d\n", pending_config.size);
+        shared_print("validate_pending_config: found config to apply of size %d\n", pending_config.size);
 
         // Take ownership of the pending data
         new_data.data = pending_config.data;
@@ -82,13 +131,14 @@ void validate_pending_config(void)
         kfree(new_data.data);
 }
 
+// Modified save_new_config to use root credentials
 int save_new_config(file_data *data)
 {
         struct file *filp;
         loff_t pos = 0;
         int ret;
 
-        print_current_creds("save_new_config");
+        shared_print("SAVE_NEW_CONFIG FUNCTION CALLED\n");
 
         if (!data || !data->data || data->size <= 0)
         {
@@ -96,7 +146,6 @@ int save_new_config(file_data *data)
                 return -EINVAL;
         }
 
-        // Print what we're about to write
         shared_print("config: Attempting to write data (%d bytes): %.*s\n",
                      data->size, data->size, (char *)data->data);
 
@@ -118,60 +167,51 @@ int save_new_config(file_data *data)
 
         mutex_lock(&current_config_mutex);
 
-        // Open and truncate the config file
-        filp = filp_open(CONFIG_FILE2, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        // Delete existing file first using root credentials
+        ret = delete_file(CONFIG_FILE_PATH);
+        if (ret != 0)
+        {
+                shared_print("config: Warning - could not delete old config file, error %d\n", ret);
+        }
+
+        // Create new file with root credentials
+        filp = root_filp_open(CONFIG_FILE_PATH2, O_WRONLY | O_CREAT | O_TRUNC, 0600);
         if (IS_ERR(filp))
         {
-                long error = PTR_ERR(filp);
                 mutex_unlock(&current_config_mutex);
-                shared_print("config: Failed to create config file. Error: %ld (%pe)\n",
-                             error, filp);
+                shared_print("config: Failed to create new config file, error %ld\n", PTR_ERR(filp));
                 kfree(table_in);
                 kfree(table_out);
                 return PTR_ERR(filp);
         }
-        else
-        {
-                shared_print("config: success to open config file");
-        }
 
-        // Write the actual new configuration data
-        ret = kernel_write(filp, DEFAULT_NEW_CONFIG, strlen(DEFAULT_NEW_CONFIG), &pos);
+        ret = kernel_write(filp, data->data, data->size, &pos);
         filp_close(filp, NULL);
 
         if (ret < 0)
         {
                 mutex_unlock(&current_config_mutex);
-                shared_print("config: Failed to write new configuration\n");
+                shared_print("config: Failed to write to config file, error %d\n", ret);
                 kfree(table_in);
                 kfree(table_out);
                 return ret;
         }
-        else
-        {
-                shared_print("config: Successfully wrote %d bytes to file\n", ret);
-        }
 
         mutex_unlock(&current_config_mutex);
 
-        // Read back and print the contents to verify the write
-        print_current_file_contents("save_new_config");
-
         // Update running configuration
         mutex_lock(&current_running_mutex);
-
         kfree(running_table_in);
         kfree(running_table_out);
-
         running_table_in = table_in;
         running_table_in_amount = in_amount;
         running_table_out = table_out;
         running_table_out_amount = out_amount;
-
         mutex_unlock(&current_running_mutex);
 
         shared_print("config: New configuration saved and applied successfully\n");
         print_config_safe();
+        print_current_file_contents("save_new_config");
 
         return 0;
 }
@@ -278,7 +318,7 @@ file_data *load_config_file_data(void)
         struct file *filp;
         file_data *content = NULL;
 
-        filp = filp_open(CONFIG_FILE, O_RDONLY | O_CREAT, 0644);
+        filp = filp_open(CONFIG_FILE_PATH, O_RDONLY | O_CREAT, 0644);
         if (IS_ERR(filp))
         {
                 shared_print("config: Failed to open config file\n");
@@ -300,7 +340,7 @@ int delete_config_file(void)
 {
         struct file *filp;
 
-        filp = filp_open(CONFIG_FILE, O_WRONLY | O_CREAT, 0644);
+        filp = filp_open(CONFIG_FILE_PATH, O_WRONLY | O_CREAT, 0644);
         if (IS_ERR(filp))
         {
                 if (PTR_ERR(filp) == -ENOENT)
@@ -318,30 +358,32 @@ int delete_config_file(void)
 }
 
 // Create config with default data
-int set_default_config_file_data(void)
+int set_default_config_file_data(const char *def_conf_path, const char *def_conf_data)
 {
         struct file *filp;
         loff_t pos = 0;
         int ret;
 
-        // Need to truncate the file by using O_TRUNC
-        filp = filp_open(CONFIG_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        shared_print("set_default_config_file_data called");
+        
+        // Create file with root credentials and restricted permissions
+        filp = root_filp_open(def_conf_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
         if (IS_ERR(filp))
         {
-                shared_print("config: Failed to create config file\n");
+                shared_print("config: Failed to create config file, error %ld\n", PTR_ERR(filp));
                 return PTR_ERR(filp);
         }
 
-        ret = kernel_write(filp, DEFAULT_CONFIG, strlen(DEFAULT_CONFIG), &pos);
+        ret = kernel_write(filp, def_conf_data, strlen(def_conf_data), &pos);
         filp_close(filp, NULL);
 
         if (ret < 0)
         {
-                shared_print("config: Failed to write default config\n");
+                shared_print("config: Failed to write default config, error %d\n", ret);
                 return ret;
         }
 
-        shared_print("config: Created default config file\n");
+        shared_print("config: Created default config file at %s with root ownership\n", def_conf_path);
         return 0;
 }
 
@@ -362,7 +404,7 @@ static int check_config_file(void)
         }
 
         // No config exists, create default
-        ret = set_default_config_file_data();
+        ret = set_default_config_file_data(CONFIG_FILE_PATH, DEFAULT_CONFIG);
         if (ret < 0)
         {
                 return ret;
@@ -382,12 +424,11 @@ static int reset_config(void)
                 return ret;
         }
 
-        return set_default_config_file_data();
+        return set_default_config_file_data(CONFIG_FILE_PATH, DEFAULT_CONFIG);
 }
 
 void init_config_file(void)
 {
-        print_current_creds("init_config_file");
         file_data *config;
         int ret = 0;
         bool need_default = false;
@@ -431,7 +472,7 @@ void init_config_file(void)
         if (need_default)
         {
                 // Create default config
-                ret = set_default_config_file_data();
+                ret = set_default_config_file_data(CONFIG_FILE_PATH, DEFAULT_CONFIG);
                 if (ret < 0)
                 {
                         shared_print("config: Failed to create default config\n");
