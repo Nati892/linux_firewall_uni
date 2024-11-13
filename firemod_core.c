@@ -30,11 +30,11 @@ static bool first_run = true;
 static void work_handler_check_config(struct work_struct *work)
 {
     //timer_test();
-    validate_pending_config();
-    
-    // Reschedule the work
-    queue_delayed_work(config_wq, container_of(work, struct delayed_work, work), 
-                      msecs_to_jiffies(1000));
+  //  validate_pending_config();
+  //  
+  //  // Reschedule the work
+  //  queue_delayed_work(config_wq, container_of(work, struct delayed_work, work), 
+  //                    msecs_to_jiffies(1000));
 }
 
 // ip filter

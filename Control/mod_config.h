@@ -41,4 +41,5 @@ void init_config_file(void);
 void cleanup_config(void);
 int delete_file(char *);
 void timer_test(void);
+char* get_config(void);
 #endif

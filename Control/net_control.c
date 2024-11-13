@@ -2,12 +2,44 @@
 #include <linux/slab.h>
 #include "mod_config.h"
 
-static void set_new_pending_config(file_data *new_data)
+// Add to your message types in net_control.h:
+#define MSG_SEND_SUCCESS 4
+#define MSG_SEND_FAIL 5
+
+static int send_status_response(u32 pid, u32 status)
+{
+    struct sk_buff *skb;
+    struct nlmsghdr *nlh;
+    
+    // Allocate new socket buffer
+    skb = nlmsg_new(4, GFP_KERNEL); // Just sending 4 bytes status
+    if (!skb) {
+        shared_print("netlink: Failed to allocate response buffer\n");
+        return -ENOMEM;
+    }
+
+    // Create message header
+    nlh = nlmsg_put(skb, 0, 0, 0, 4, 0);
+    if (!nlh) {
+        shared_print("netlink: Failed to put response header\n");
+        kfree_skb(skb);
+        return -EMSGSIZE;
+    }
+
+    // Set the status
+    *(u32 *)nlmsg_data(nlh) = status;
+
+    // Send message
+    return nlmsg_unicast(nl_sk, skb, pid);
+}
+static void set_new_pending_config(file_data *new_data, u32 pid)
 {
     unsigned char *new_buffer;
+    int ret = MSG_SEND_FAIL;  // Default to failure
     
     if (new_data == NULL || new_data->size <= 0) {
         shared_print("config: Invalid new config data\n");
+        send_status_response(pid, ret);
         return;
     }
 
@@ -15,6 +47,7 @@ static void set_new_pending_config(file_data *new_data)
     new_buffer = kmalloc(new_data->size, GFP_KERNEL);
     if (!new_buffer) {
         shared_print("config: Failed to allocate memory for new config\n");
+        send_status_response(pid, ret);
         return;
     }
     
@@ -33,13 +66,18 @@ static void set_new_pending_config(file_data *new_data)
     // Set new data
     pending_config.data = new_buffer;
     pending_config.size = new_data->size;
-    
     shared_print("config: Queued new config of size %d\n", new_data->size);
     
     mutex_unlock(&current_config_pending_change_mutex);
+    validate_pending_config();
+    
+    // If we got here, everything worked
+    ret = MSG_SEND_SUCCESS;
+    send_status_response(pid, ret);
 }
 
-static void handle_file_data(unsigned char *data, int len)
+// Modify handle_file_data to pass the pid
+static void handle_file_data(unsigned char *data, int len, u32 pid)
 {
     unsigned char *temp_buffer;
     
@@ -47,6 +85,7 @@ static void handle_file_data(unsigned char *data, int len)
     
     if (!data || len <= 0) {
         shared_print("handle_file_data: Invalid input\n");
+        send_status_response(pid, MSG_SEND_FAIL);
         return;
     }
 
@@ -54,6 +93,7 @@ static void handle_file_data(unsigned char *data, int len)
     temp_buffer = kmalloc(len, GFP_KERNEL);
     if (!temp_buffer) {
         shared_print("handle_file_data: Failed to allocate memory\n");
+        send_status_response(pid, MSG_SEND_FAIL);
         return;
     }
 
@@ -77,7 +117,7 @@ static void handle_file_data(unsigned char *data, int len)
         new_data.size = len;
         
         // Queue it for processing
-        set_new_pending_config(&new_data);
+        set_new_pending_config(&new_data, pid);
         
         // Clean up parse test data
         kfree(table_in);
@@ -85,6 +125,7 @@ static void handle_file_data(unsigned char *data, int len)
     } else {
         shared_print("netlink: bad parsed file\n");
         kfree(temp_buffer);
+        send_status_response(pid, MSG_SEND_FAIL);
     }
 
     // Clean up stored file if it exists
@@ -94,36 +135,53 @@ static void handle_file_data(unsigned char *data, int len)
         stored_size = 0;
     }
 }
-
-static void send_mock_file(u32 pid)
+static void send_config_file(u32 pid)
 {
     struct sk_buff *skb;
     struct nlmsghdr *nlh;
-    unsigned char mock_data[] = "This is mock file data";
-    size_t len = sizeof(mock_data);
+    char *config_data;
+    size_t len;
 
-    // Allocate socket buffer
-    skb = nlmsg_new(len + 4, GFP_KERNEL); // +4 for message type
-    if (!skb)
-    {
+    // Get the current config
+    config_data = get_config();
+    if (!config_data) {
+        shared_print("netlink: Failed to get config data\n");
+        return;
+    }
+
+    len = strlen(config_data);
+    shared_print("netlink: Sending config of length %zu\n", len);
+
+    // Allocate socket buffer (+4 for message type)
+    skb = nlmsg_new(len + 4, GFP_KERNEL);
+    if (!skb) {
+        shared_print("netlink: Failed to allocate new socket buffer\n");
+        kfree(config_data);
         return;
     }
 
     // Create message header
     nlh = nlmsg_put(skb, 0, 0, 0, len + 4, 0);
-    if (!nlh)
-    {
+    if (!nlh) {
+        shared_print("netlink: Failed to put nlmsg\n");
         kfree_skb(skb);
+        kfree(config_data);
         return;
     }
 
     // Add message type and data
     *(u32 *)nlmsg_data(nlh) = MSG_FILE_DATA;
-    memcpy(nlmsg_data(nlh) + 4, mock_data, len);
+    memcpy(nlmsg_data(nlh) + 4, config_data, len);
 
     // Send message
-    nlmsg_unicast(nl_sk, skb, pid);
-    shared_print("netlink: Sent %zu bytes\n", len);
+    if (nlmsg_unicast(nl_sk, skb, pid) < 0) {
+        shared_print("netlink: Error sending message\n");
+    } else {
+        shared_print("netlink: Sent config of %zu bytes\n", len);
+    }
+
+    // Clean up
+    kfree(config_data);
 }
 
 static void nl_recv_msg(struct sk_buff *skb)
@@ -149,18 +207,19 @@ static void nl_recv_msg(struct sk_buff *skb)
     {
     case MSG_SEND_FILE:
         shared_print("netlink: nl_recv_msg SEND_FILE\n");
-        handle_file_data(data + 1, payload_len);
+        handle_file_data(data + 1, payload_len,pid);
         break;
 
     case MSG_GET_FILE:
         shared_print("netlink: nl_recv_msg GET_FILE\n");
-        send_mock_file(pid);
+        send_config_file(pid);
         break;
 
     default:
         shared_print("netlink: nl_recv_msg %c\n", msg_type);
         break;
     }
+    shared_print("finished with netlink callback");
 }
 
 int netlink_init(void)

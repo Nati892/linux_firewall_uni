@@ -413,6 +413,77 @@ static int check_config_file(void)
         return 0;
 }
 
+char* get_config(void) {
+    struct file *filp;
+    file_data *content;
+    char *config_str = NULL;
+    
+    // Lock both mutexes to prevent any changes to the config file while we read
+    mutex_lock(&current_config_mutex);
+    mutex_lock(&current_config_pending_change_mutex);
+    
+    // First try to read existing config
+    filp = filp_open(CONFIG_FILE_PATH, O_RDONLY, 0);
+    if (!IS_ERR(filp)) {
+        content = read_entire_file(filp);
+        filp_close(filp, NULL);
+        
+        if (content && content->data) {
+            // Allocate memory for the return string (+1 for null terminator)
+            config_str = kmalloc(content->size + 1, GFP_KERNEL);
+            if (config_str) {
+                memcpy(config_str, content->data, content->size);
+                config_str[content->size] = '\0';
+                free_file_data(content);
+                mutex_unlock(&current_config_pending_change_mutex);
+                mutex_unlock(&current_config_mutex);
+                return config_str;
+            }
+            free_file_data(content);
+        }
+    }
+    
+    // If we get here, either:
+    // 1. File couldn't be opened
+    // 2. Couldn't read file content
+    // 3. Memory allocation failed
+    // So create default config and try again
+    
+    if (set_default_config_file_data(CONFIG_FILE_PATH, DEFAULT_CONFIG) == 0) {
+        filp = filp_open(CONFIG_FILE_PATH, O_RDONLY, 0);
+        if (!IS_ERR(filp)) {
+            content = read_entire_file(filp);
+            filp_close(filp, NULL);
+            
+            if (content && content->data) {
+                config_str = kmalloc(content->size + 1, GFP_KERNEL);
+                if (config_str) {
+                    memcpy(config_str, content->data, content->size);
+                    config_str[content->size] = '\0';
+                    free_file_data(content);
+                    mutex_unlock(&current_config_pending_change_mutex);
+                    mutex_unlock(&current_config_mutex);
+                    return config_str;
+                }
+                free_file_data(content);
+            }
+        }
+    }
+    
+    // If everything fails, return a copy of the default config
+    config_str = kmalloc(strlen(DEFAULT_CONFIG) + 1, GFP_KERNEL);
+    if (config_str) {
+        strcpy(config_str, DEFAULT_CONFIG);
+        mutex_unlock(&current_config_pending_change_mutex);
+        mutex_unlock(&current_config_mutex);
+        return config_str;
+    }
+    
+    mutex_unlock(&current_config_pending_change_mutex);
+    mutex_unlock(&current_config_mutex);
+    return NULL;
+}
+
 // Example of how to reset config to default
 static int reset_config(void)
 {
