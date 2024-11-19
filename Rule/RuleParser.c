@@ -515,7 +515,7 @@ fire_Rule parse_json_to_rule(char *json_string)
     value = extract_value(json_string, "source_address");
     if (value)
     {
-        parse_error = parse_ip(value, &(rule.source_addresses));
+        parse_error = parse_ip(value, &(rule.source_address));
         shared_free(value);
         if (parse_error < 0)
         {
@@ -543,7 +543,7 @@ fire_Rule parse_json_to_rule(char *json_string)
     value = extract_value(json_string, "destination_address");
     if (value)
     {
-        parse_error = parse_ip(value, &(rule.destination_addresses));
+        parse_error = parse_ip(value, &(rule.destination_address));
         shared_free(value);
         if (parse_error < 0)
         {

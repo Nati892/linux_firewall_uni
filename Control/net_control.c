@@ -32,10 +32,11 @@ static int send_status_response(u32 pid, u32 status)
     // Send message
     return nlmsg_unicast(nl_sk, skb, pid);
 }
+
 static void set_new_pending_config(file_data *new_data, u32 pid)
 {
     unsigned char *new_buffer;
-    int ret = MSG_SEND_FAIL;  // Default to failure
+    int ret = MSG_SEND_FAIL;
     
     if (new_data == NULL || new_data->size <= 0) {
         shared_print("config: Invalid new config data\n");
@@ -43,7 +44,6 @@ static void set_new_pending_config(file_data *new_data, u32 pid)
         return;
     }
 
-    // Allocate new buffer first
     new_buffer = kmalloc(new_data->size, GFP_KERNEL);
     if (!new_buffer) {
         shared_print("config: Failed to allocate memory for new config\n");
@@ -51,28 +51,25 @@ static void set_new_pending_config(file_data *new_data, u32 pid)
         return;
     }
     
-    // Copy data to new buffer
     memcpy(new_buffer, new_data->data, new_data->size);
 
     mutex_lock(&current_config_pending_change_mutex);
     
-    // Free old data if exists
     if (pending_config.data != NULL) {
         kfree(pending_config.data);
         pending_config.data = NULL;
         pending_config.size = 0;
     }
-
-    // Set new data
+    
     pending_config.data = new_buffer;
     pending_config.size = new_data->size;
-    shared_print("config: Queued new config of size %d\n", new_data->size);
+    
+    ret = MSG_SEND_SUCCESS;
     
     mutex_unlock(&current_config_pending_change_mutex);
-    validate_pending_config();
     
-    // If we got here, everything worked
-    ret = MSG_SEND_SUCCESS;
+    shared_print("config: Queued new config of size %d\n", new_data->size);
+    validate_pending_config();
     send_status_response(pid, ret);
 }
 

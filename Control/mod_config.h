@@ -13,18 +13,17 @@ typedef struct
     int size;
 } file_data;
 
-// Current configuration pending change storage
+// Mutexes
 extern struct mutex current_config_pending_change_mutex; // Protects the current config file
-
-// Current configuration storage
 extern struct mutex current_config_mutex; // Protects the current config file
-
 extern struct mutex current_running_mutex; // Protects the tables -- running data
-extern fire_Rule *running_table_in;
-extern int running_table_in_amount;
-extern fire_Rule *running_table_out;
-extern int running_table_out_amount;
-extern file_data pending_config;
+
+//data protected by mutexes
+extern fire_Rule *running_table_in;//protected by current_running_mutex
+extern int running_table_in_amount;//protected by current_running_mutex
+extern fire_Rule *running_table_out;//protected by current_running_mutex
+extern int running_table_out_amount;//protected by current_running_mutex
+extern file_data pending_config;//protected by current_config_pending_change_mutex
 // functions
 
 void validate_pending_config(void);

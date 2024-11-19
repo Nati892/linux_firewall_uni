@@ -9,10 +9,10 @@ void print_rule(fire_Rule *rule)
     }
     shared_print("Parsed rule ID: %d", rule->id);
     shared_print("Source address: %d.%d.%d.%d       \n",
-           ((unsigned char*)&(rule->source_addresses))[0], ((unsigned char*)&(rule->source_addresses))[1], ((unsigned char*)&(rule->source_addresses))[2], ((unsigned char*)&(rule->source_addresses))[3]);
+           ((unsigned char*)&(rule->source_address))[0], ((unsigned char*)&(rule->source_address))[1], ((unsigned char*)&(rule->source_address))[2], ((unsigned char*)&(rule->source_address))[3]);
     shared_print("Source port: %d", rule->source_port);
     shared_print("Dest address: %d.%d.%d.%d       \n",
-           ((unsigned char*)&(rule->destination_addresses))[0], ((unsigned char*)&(rule->destination_addresses))[1], ((unsigned char*)&(rule->destination_addresses))[2], ((unsigned char*)&(rule->destination_addresses))[3]);
+           ((unsigned char*)&(rule->destination_address))[0], ((unsigned char*)&(rule->destination_address))[1], ((unsigned char*)&(rule->destination_address))[2], ((unsigned char*)&(rule->destination_address))[3]);
     shared_print("Dest port: %d       \n", rule->destination_port);
     shared_print("Protocol: %s       \n", rule->proto == fire_proto_TCP ? "TCP" : "UDP");
     shared_print("Action: %s       \n", rule->action == fire_ACCEPT ? "ACCEPT" : "DROP");
