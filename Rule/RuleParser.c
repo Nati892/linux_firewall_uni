@@ -568,6 +568,7 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     // Parse protocol
+    shared_print("debug,parse field - protocol");
     value = extract_value(json_string, "protocol");
     if (value)
     {
@@ -588,6 +589,7 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     // Parse action
+    shared_print("debug,parse field - action");
     value = extract_value(json_string, "action");
     if (value)
     {
@@ -606,6 +608,7 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     // Parse direction
+    shared_print("debug,parse field - direction");
     value = extract_value(json_string, "direction");
     if (value)
     {
@@ -623,14 +626,22 @@ fire_Rule parse_json_to_rule(char *json_string)
         shared_free(value);
     }
 
+    shared_print("debug,parse field - enabled");
     // Parse enabled
     value = extract_value(json_string, "enabled");
     if (value)
     {
+        shared_print("debug,parse found field enabled");
         if (strcmp(value, "true") == 0)
+        {
             rule.enabled = fire_TRUE;
+            shared_print("debug,parse found field enabled true");
+        }
         else if (strcmp(value, "false") == 0)
+        {
             rule.enabled = fire_FALSE;
+            shared_print("debug,parse found field enabled false");
+        }
         else
         {
             rule.id = -1;
@@ -638,6 +649,10 @@ fire_Rule parse_json_to_rule(char *json_string)
             shared_print("error parsing enabled ");
             return rule;
         }
+    }
+    else
+    {
+        shared_print("debug,parse  DIDNT found feild enabled");
     }
 
     return rule;
