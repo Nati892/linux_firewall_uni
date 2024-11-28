@@ -265,40 +265,97 @@ int parse_ip(const char *ip, SHARED_UINT32 *output)
 
 #endif
 
-#ifndef __KERNEL__
-// Helper function to parse port range
-int parse_port_range(const char *port_str)
-{
-    char port[MAX_PORT_LENGTH];
-    strncpy(port, port_str, MAX_PORT_LENGTH - 1);
-    port[MAX_PORT_LENGTH - 1] = '\0';
 
-    // Convert the port string to an integer and validate
-    int port_num = atoi(port);
-
-    if (port_num < 0 || port_num > 65535)
-    {
-        return -1; // Invalid port
+// Helper function to replace strdup
+static char* fire_strdup(const char* s) {
+    size_t size = strlen(s) + 1;
+    char* p = shared_malloc(size);
+    if (p) {
+        memcpy(p, s, size);
     }
-
-    return port_num; // Return the validated port
+    return p;
 }
 
-#else
-// Helper function to parse port range
-int parse_port_range(const char *port_str)
+
+int parse_ip_range(const char *ip_range, SHARED_UINT32 *start_ip, SHARED_UINT32 *end_ip)
 {
-
-    int port_num = parse_int(port_str);
-    // Check if the conversion was successful and if we parsed the whole string
-    if (port_num > 65535 || port_num < 0)
-    {
-        return -1; // Invalid port
+    char *range_str = fire_strdup(ip_range);
+    char *delimiter = strchr(range_str, '-');
+    
+    if (delimiter) {
+        // Range specified
+        *delimiter = '\0';
+        char *start_str = range_str;
+        char *end_str = delimiter + 1;
+        
+        // Trim whitespace
+        while (isspace(*start_str)) start_str++;
+        while (isspace(*end_str)) end_str++;
+        
+        if (parse_ip(start_str, start_ip) < 0 || 
+            parse_ip(end_str, end_ip) < 0) {
+            shared_free(range_str);
+            return -1;
+        }
+        
+        // Validate range
+        if (ntohl(*start_ip) > ntohl(*end_ip)) {
+            shared_free(range_str);
+            return -1;
+        }
+    } else {
+        // Single IP
+        if (parse_ip(range_str, start_ip) < 0) {
+            shared_free(range_str);
+            return -1;
+        }
+        *end_ip = *start_ip;
     }
-
-    return (int)port_num; // Return the validated port
+    
+    shared_free(range_str);
+    return 0;
 }
-#endif
+
+int parse_port_range(const char *port_range, uint32_t *start_port, uint32_t *end_port)
+{
+    char *range_str = fire_strdup(port_range);
+    char *delimiter = strchr(range_str, '-');
+    
+    if (delimiter) {
+        // Range specified
+        *delimiter = '\0';
+        char *start_str = range_str;
+        char *end_str = delimiter + 1;
+        
+        // Trim whitespace
+        while (isspace(*start_str)) start_str++;
+        while (isspace(*end_str)) end_str++;
+        
+        int start = parse_int(start_str);
+        int end = parse_int(end_str);
+        
+        if (start < 0 || start > 65535 || end < 0 || end > 65535 || start > end) {
+            shared_free(range_str);
+            return -1;
+        }
+        
+        *start_port = (uint32_t)start;
+        *end_port = (uint32_t)end;
+    } else {
+        // Single port
+        int port = parse_int(range_str);
+        if (port < 0 || port > 65535) {
+            shared_free(range_str);
+            return -1;
+        }
+        *start_port = (uint32_t)port;
+        *end_port = *start_port;
+    }
+    
+    shared_free(range_str);
+    return 0;
+}
+
 
 // Assuming shared_malloc and safe_strcpy are defined elsewhere
 
@@ -496,90 +553,154 @@ fire_Rule parse_json_to_rule(char *json_string)
 {
     int parse_error = 0;
     fire_Rule rule;
-
     char *value;
+
     // Parse id
     value = extract_value(json_string, "id");
-    if (value)
-    {
+    if (value) {
         rule.id = parse_int(value);
         shared_free(value);
-        if (rule.id < 0)
-        {
+        if (rule.id < 0) {
             shared_print("error parsing id");
             return rule;
         }
     }
 
-    // Parse source_address
-    value = extract_value(json_string, "source_address");
-    if (value)
-    {
-        parse_error = parse_ip(value, &(rule.source_address));
+    // Parse source address ranges
+    value = extract_value(json_string, "source_address_start");
+    if (value) {
+        parse_error = parse_ip(value, &(rule.source_address_start));
         shared_free(value);
-        if (parse_error < 0)
-        {
+        if (parse_error < 0) {
             rule.id = -1;
-            shared_print("error parsing source ip range");
+            shared_print("error parsing source ip start range");
             return rule;
         }
     }
 
-    // Parse source_port
-    value = extract_value(json_string, "source_port");
-    if (value)
-    {
-        rule.source_port = parse_port_range(value);
+    value = extract_value(json_string, "source_address_end");
+    if (value) {
+        parse_error = parse_ip(value, &(rule.source_address_end));
         shared_free(value);
-        if (rule.source_port == -1)
-        {
+        if (parse_error < 0) {
             rule.id = -1;
-            shared_print("error parsing source port");
+            shared_print("error parsing source ip end range");
             return rule;
         }
     }
 
-    // Parse destination_address
-    value = extract_value(json_string, "destination_address");
-    if (value)
-    {
-        parse_error = parse_ip(value, &(rule.destination_address));
+    // Validate source IP range
+    if (ntohl(rule.source_address_start) > ntohl(rule.source_address_end)) {
+        rule.id = -1;
+        shared_print("error: source IP start is greater than end");
+        return rule;
+    }
+
+    // Parse source port ranges
+    value = extract_value(json_string, "source_port_start");
+    if (value) {
+        int port = parse_int(value);
         shared_free(value);
-        if (parse_error < 0)
-        {
+        if (port < 0 || port > 65535) {
             rule.id = -1;
-            shared_print("error parsing dest ip address range");
+            shared_print("error parsing source port start");
+            return rule;
+        }
+        rule.source_port_start = port;
+    }
+
+    value = extract_value(json_string, "source_port_end");
+    if (value) {
+        int port = parse_int(value);
+        shared_free(value);
+        if (port < 0 || port > 65535) {
+            rule.id = -1;
+            shared_print("error parsing source port end");
+            return rule;
+        }
+        rule.source_port_end = port;
+    }
+
+    // Validate source port range
+    if (rule.source_port_start > rule.source_port_end) {
+        rule.id = -1;
+        shared_print("error: source port start is greater than end");
+        return rule;
+    }
+
+    // Parse destination address ranges
+    value = extract_value(json_string, "destination_address_start");
+    if (value) {
+        parse_error = parse_ip(value, &(rule.destination_address_start));
+        shared_free(value);
+        if (parse_error < 0) {
+            rule.id = -1;
+            shared_print("error parsing destination ip start range");
             return rule;
         }
     }
 
-    // Parse destination_port
-    value = extract_value(json_string, "destination_port");
-    if (value)
-    {
-        rule.destination_port = parse_port_range(value);
+    value = extract_value(json_string, "destination_address_end");
+    if (value) {
+        parse_error = parse_ip(value, &(rule.destination_address_end));
         shared_free(value);
-        if (rule.destination_port == -1)
-        {
+        if (parse_error < 0) {
             rule.id = -1;
-            shared_print("error parsing dest port address range");
+            shared_print("error parsing destination ip end range");
             return rule;
         }
+    }
+
+    // Validate destination IP range
+    if (ntohl(rule.destination_address_start) > ntohl(rule.destination_address_end)) {
+        rule.id = -1;
+        shared_print("error: destination IP start is greater than end");
+        return rule;
+    }
+
+    // Parse destination port ranges
+    value = extract_value(json_string, "destination_port_start");
+    if (value) {
+        int port = parse_int(value);
+        shared_free(value);
+        if (port < 0 || port > 65535) {
+            rule.id = -1;
+            shared_print("error parsing destination port start");
+            return rule;
+        }
+        rule.destination_port_start = port;
+    }
+
+    value = extract_value(json_string, "destination_port_end");
+    if (value) {
+        int port = parse_int(value);
+        shared_free(value);
+        if (port < 0 || port > 65535) {
+            rule.id = -1;
+            shared_print("error parsing destination port end");
+            return rule;
+        }
+        rule.destination_port_end = port;
+    }
+
+    // Validate destination port range
+    if (rule.destination_port_start > rule.destination_port_end) {
+        rule.id = -1;
+        shared_print("error: destination port start is greater than end");
+        return rule;
     }
 
     // Parse protocol
     shared_print("debug,parse field - protocol");
     value = extract_value(json_string, "protocol");
-    if (value)
-    {
+    if (value) {
         if (strcmp(value, "TCP") == 0)
             rule.proto = fire_proto_TCP;
         else if (strcmp(value, "UDP") == 0)
             rule.proto = fire_proto_UDP;
         else if (strcmp(value, "ANY") == 0)
             rule.proto = fire_proto_ANY;
-        else
-        {
+        else {
             rule.id = -1;
             shared_free(value);
             shared_print("error parsing protocol");
@@ -591,14 +712,12 @@ fire_Rule parse_json_to_rule(char *json_string)
     // Parse action
     shared_print("debug,parse field - action");
     value = extract_value(json_string, "action");
-    if (value)
-    {
+    if (value) {
         if (strcmp(value, "ACCEPT") == 0)
             rule.action = fire_ACCEPT;
         else if (strcmp(value, "DROP") == 0)
             rule.action = fire_DROP;
-        else
-        {
+        else {
             rule.id = -1;
             shared_free(value);
             shared_print("error parsing action");
@@ -610,49 +729,44 @@ fire_Rule parse_json_to_rule(char *json_string)
     // Parse direction
     shared_print("debug,parse field - direction");
     value = extract_value(json_string, "direction");
-    if (value)
-    {
+    if (value) {
         if (strcmp(value, "INBOUND") == 0)
             rule.direction = fire_dir_INBOUND;
         else if (strcmp(value, "OUTBOUND") == 0)
             rule.direction = fire_dir_OUTBOUND;
-        else
-        {
+        else {
             rule.id = -1;
             shared_free(value);
-            shared_print("error parsing diraction");
+            shared_print("error parsing direction");
             return rule;
         }
         shared_free(value);
     }
 
-    shared_print("debug,parse field - enabled");
     // Parse enabled
+    shared_print("debug,parse field - enabled");
     value = extract_value(json_string, "enabled");
-    if (value)
-    {
+    if (value) {
         shared_print("debug,parse found field enabled");
-        if (strcmp(value, "true") == 0)
-        {
+        if (strcmp(value, "true") == 0) {
             rule.enabled = fire_TRUE;
             shared_print("debug,parse found field enabled true");
         }
-        else if (strcmp(value, "false") == 0)
-        {
+        else if (strcmp(value, "false") == 0) {
             rule.enabled = fire_FALSE;
             shared_print("debug,parse found field enabled false");
         }
-        else
-        {
+        else {
             rule.id = -1;
             shared_free(value);
-            shared_print("error parsing enabled ");
+            shared_print("error parsing enabled");
             return rule;
         }
+        shared_free(value);
     }
-    else
-    {
-        shared_print("debug,parse  DIDNT found feild enabled");
+    else {
+        shared_print("debug,parse DIDNT found field enabled");
+        rule.enabled = fire_TRUE;  // Default to enabled if not specified
     }
 
     return rule;

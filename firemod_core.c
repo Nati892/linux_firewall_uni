@@ -4,8 +4,8 @@
 #include "Head/stdafx.h"
 #include "Rule/Rule.h"
 #include "Rule/RuleParser.h"
-#include "tester/rule_tests.h"
-#include "tester/main.h"
+// #include "tester/rule_tests.h"
+// #include "tester/main.h"
 #include "Control/net_control.h"
 #include "Control/mod_config.h"
 
@@ -109,6 +109,20 @@ void __exit fire_module_exit(void)
     shared_print("firemod:unloading function ended\n");
 }
 
+// HELPER FUNCTIONS
+//  Helper function to check if an IP is within a range
+static inline bool ip_in_range(SHARED_UINT32 ip, SHARED_UINT32 range_start, SHARED_UINT32 range_end)
+{
+    return (ntohl(ip) >= ntohl(range_start) && ntohl(ip) <= ntohl(range_end));
+}
+
+// Helper function to check if a port is within a range
+static inline bool port_in_range(uint16_t port, uint32_t range_start, uint32_t range_end)
+{
+    return (port >= range_start && port <= range_end);
+}
+// END OF HELPER FUNCTIONS
+
 unsigned int process_inbound_traffic(void *priv,
                                      struct sk_buff *skb,
                                      const struct nf_hook_state *state)
@@ -134,10 +148,10 @@ unsigned int process_inbound_traffic(void *priv,
     shared_print("debug: rule amount in:%d", running_table_in_amount); // debug
     for (i = 0; i < running_table_in_amount; i++)
     {
-        //shared_print("debug: rule check :%d", i); // debug
-        if (running_table_in[i].enabled==fire_FALSE)
+        // shared_print("debug: rule check :%d", i); // debug
+        if (running_table_in[i].enabled == fire_FALSE)
         {
-           shared_print("debug: rule %d not enabled ", i); // debug
+            shared_print("debug: rule %d not enabled ", i); // debug
             continue;
         }
         shared_print("debug: rule %d is enabled ", i); // debug
@@ -169,50 +183,18 @@ unsigned int process_inbound_traffic(void *priv,
             dst_port = udph->dest;
             proto_str = "UDP";
         }
-                // Convert network byte order ports to host byte order for comparison
+        // Convert network byte order ports to host byte order for comparison
         __u16 src_port_host = ntohs(src_port);
         __u16 dst_port_host = ntohs(dst_port);
-        if(running_table_in[i].source_address == iph->saddr)
-        {
-            shared_print("debug: proto same source ip as rule"); // debug
-        }
-        else
-        {
-            shared_print("debug: proto NOT same source ip as rule"); // debug
-        }
 
-        if(running_table_in[i].destination_address == iph->daddr)
-        {
-            shared_print("debug: proto same daddr ip as rule"); // debug
-        }
-        else
-        {
-            shared_print("debug: proto NOT same daddr ip as rule"); // debug
-        }
-
-        if(running_table_in[i].source_port == src_port_host)
-        {
-            shared_print("debug: proto same sport as rule"); // debug
-        }
-        else
-        {
-            shared_print("debug: proto NOT same sport %d as rule port %d",running_table_in[i].source_port,src_port_host); // debug
-        }
-
-         if(running_table_in[i].destination_port == dst_port_host)
-        {
-            shared_print("debug: proto same dst_port as rule"); // debug
-        }
-        else
-        {
-            shared_print("debug: proto NOT same dst_port:%d as rule port %d",running_table_in[i].destination_port,dst_port_host); // debug
-        }
-
-
-        if (running_table_in[i].source_address == iph->saddr &&
-            running_table_in[i].destination_address == iph->daddr &&
-            running_table_in[i].source_port == src_port_host &&
-            running_table_in[i].destination_port == dst_port_host)
+        if (ip_in_range(iph->saddr, running_table_in[i].source_address_start,
+                        running_table_in[i].source_address_end) &&
+            ip_in_range(iph->daddr, running_table_in[i].destination_address_start,
+                        running_table_in[i].destination_address_end) &&
+            port_in_range(src_port_host, running_table_in[i].source_port_start,
+                          running_table_in[i].source_port_end) &&
+            port_in_range(dst_port_host, running_table_in[i].destination_port_start,
+                          running_table_in[i].destination_port_end))
         {
             shared_print("debug: proto same source ip and ports"); // debug
             int action = (running_table_in[i].action == fire_ACCEPT) ? NF_ACCEPT : NF_DROP;
@@ -290,11 +272,18 @@ unsigned int process_outbound_traffic(void *priv,
             dst_port = udph->dest;
             proto_str = "UDP";
         }
+        // Convert network byte order ports to host byte order for comparison
+        __u16 src_port_host = ntohs(src_port);
+        __u16 dst_port_host = ntohs(dst_port);
 
-        if (running_table_out[i].source_address == iph->saddr &&
-            running_table_out[i].destination_address == iph->daddr &&
-            running_table_out[i].source_port == src_port &&
-            running_table_out[i].destination_port == dst_port)
+        if (ip_in_range(iph->saddr, running_table_in[i].source_address_start,
+                        running_table_in[i].source_address_end) &&
+            ip_in_range(iph->daddr, running_table_in[i].destination_address_start,
+                        running_table_in[i].destination_address_end) &&
+            port_in_range(src_port_host, running_table_in[i].source_port_start,
+                          running_table_in[i].source_port_end) &&
+            port_in_range(dst_port_host, running_table_in[i].destination_port_start,
+                          running_table_in[i].destination_port_end))
         {
             int action = (running_table_out[i].action == fire_ACCEPT) ? NF_ACCEPT : NF_DROP;
             mutex_unlock(&current_running_mutex);

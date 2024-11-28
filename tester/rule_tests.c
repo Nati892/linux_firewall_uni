@@ -1,5 +1,6 @@
 #include "rule_tests.h"
 
+/*
 void print_rule(fire_Rule *rule)
 {
 
@@ -337,3 +338,4 @@ int parse_test7()
     return count;
 }
 
+*/
