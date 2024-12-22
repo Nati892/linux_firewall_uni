@@ -4,8 +4,6 @@
 #include "Head/stdafx.h"
 #include "Rule/Rule.h"
 #include "Rule/RuleParser.h"
-// #include "tester/rule_tests.h"
-// #include "tester/main.h"
 #include "Control/net_control.h"
 #include "Control/mod_config.h"
 
@@ -75,7 +73,7 @@ int __init fire_module_init(void)
     int netlink_res = netlink_init();
     if (netlink_res != 0)
     {
-        shared_print("firemod: BAD INIT FOR NETLINK\n");
+        shared_print("firemod:Error: BAD INIT FOR NETLINK\n");
     }
     else
     {
@@ -87,7 +85,7 @@ int __init fire_module_init(void)
 
 void __exit fire_module_exit(void)
 {
-    shared_print("firemod:unloading function started\n");
+    shared_print("firemod:unloading module\n");
 
     if (nf_inbound_block_ops != NULL)
     {
@@ -106,7 +104,7 @@ void __exit fire_module_exit(void)
 
     close_netlink();
     cleanup_config();
-    shared_print("firemod:unloading function ended\n");
+    shared_print("firemod:unloading module ended\n");
 }
 
 // HELPER FUNCTIONS
@@ -145,10 +143,8 @@ unsigned int process_inbound_traffic(void *priv,
     snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
 
     mutex_lock(&current_running_mutex);
-    shared_print("debug: rule amount in:%d", running_table_in_amount); // debug
     for (i = 0; i < running_table_in_amount; i++)
     {
-        // shared_print("debug: rule check :%d", i); // debug
         if (running_table_in[i].enabled == fire_FALSE)
         {
             shared_print("debug: rule %d not enabled ", i); // debug
@@ -158,15 +154,11 @@ unsigned int process_inbound_traffic(void *priv,
         // Check protocol match
         if (running_table_in[i].proto != fire_proto_ANY)
         {
-            shared_print("debug: proto allowed is not any"); // debug
             if ((iph->protocol == IPPROTO_TCP && running_table_in[i].proto != fire_proto_TCP) ||
                 (iph->protocol == IPPROTO_UDP && running_table_in[i].proto != fire_proto_UDP))
                 continue;
         }
-        if (iph->protocol == IPPROTO_TCP)
-            shared_print("debug: proto tcp check rule"); // debug
-        else
-            shared_print("debug: proto udp check rule"); // debug
+
         // Get ports based on protocol
         __be16 src_port, dst_port;
         if (iph->protocol == IPPROTO_TCP)
@@ -196,7 +188,6 @@ unsigned int process_inbound_traffic(void *priv,
             port_in_range(dst_port_host, running_table_in[i].destination_port_start,
                           running_table_in[i].destination_port_end))
         {
-            shared_print("debug: proto same source ip and ports"); // debug
             int action = (running_table_in[i].action == fire_ACCEPT) ? NF_ACCEPT : NF_DROP;
             mutex_unlock(&current_running_mutex);
             if (action == NF_ACCEPT)
@@ -239,13 +230,14 @@ unsigned int process_outbound_traffic(void *priv,
     if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP)
         return NF_ACCEPT;
 
+
     snprintf(src_ip, sizeof(src_ip), "%pI4", &iph->saddr);
     snprintf(dst_ip, sizeof(dst_ip), "%pI4", &iph->daddr);
 
     mutex_lock(&current_running_mutex);
     for (i = 0; i < running_table_out_amount; i++)
     {
-        if (!running_table_out[i].enabled)
+         if (running_table_out[i].enabled==fire_FALSE)
             continue;
 
         // Check protocol match
@@ -276,14 +268,14 @@ unsigned int process_outbound_traffic(void *priv,
         __u16 src_port_host = ntohs(src_port);
         __u16 dst_port_host = ntohs(dst_port);
 
-        if (ip_in_range(iph->saddr, running_table_in[i].source_address_start,
-                        running_table_in[i].source_address_end) &&
-            ip_in_range(iph->daddr, running_table_in[i].destination_address_start,
-                        running_table_in[i].destination_address_end) &&
-            port_in_range(src_port_host, running_table_in[i].source_port_start,
-                          running_table_in[i].source_port_end) &&
-            port_in_range(dst_port_host, running_table_in[i].destination_port_start,
-                          running_table_in[i].destination_port_end))
+        if (ip_in_range(iph->saddr, running_table_out[i].source_address_start,
+                        running_table_out[i].source_address_end) &&
+            ip_in_range(iph->daddr, running_table_out[i].destination_address_start,
+                        running_table_out[i].destination_address_end) &&
+            port_in_range(src_port_host, running_table_out[i].source_port_start,
+                          running_table_out[i].source_port_end) &&
+            port_in_range(dst_port_host, running_table_out[i].destination_port_start,
+                          running_table_out[i].destination_port_end))
         {
             int action = (running_table_out[i].action == fire_ACCEPT) ? NF_ACCEPT : NF_DROP;
             mutex_unlock(&current_running_mutex);

@@ -85,13 +85,10 @@ fire_BOOL ParseRules(char *in_json,
     *rule_table_inbound = (fire_Rule *)shared_malloc(in_amount_alloc);
     *rule_table_outbound = (fire_Rule *)shared_malloc(out_amount_alloc);
 
-    shared_print("Alloc bytes for in amount: %d\n", in_amount_alloc);
-    shared_print("Alloc bytes for out amount: %d\n", out_amount_alloc);
-
     // Check if allocations were successful
     if (*rule_table_inbound == NULL || *rule_table_outbound == NULL)
     {
-        shared_print("Error: Memory allocation failed");
+        shared_print("Error: Memory allocation for Rule Tables failed");
         shared_free(parsed_rules);
         if (*rule_table_inbound)
             shared_free(*rule_table_inbound);
@@ -118,9 +115,6 @@ fire_BOOL ParseRules(char *in_json,
     // Set the table sizes
     *table_size_inbound = inbound_count;
     *table_size_outbound = outbound_count;
-
-    shared_print("Alloc amount for in amount: %d, %d\n", inbound_count, *table_size_inbound);
-    shared_print("Alloc amount for out amount: %d, %d\n", outbound_count, *table_size_outbound);
 
     // shared_free the temporary parsed rules array
     shared_free(parsed_rules);
@@ -265,53 +259,61 @@ int parse_ip(const char *ip, SHARED_UINT32 *output)
 
 #endif
 
-
 // Helper function to replace strdup
-static char* fire_strdup(const char* s) {
+static char *fire_strdup(const char *s)
+{
     size_t size = strlen(s) + 1;
-    char* p = shared_malloc(size);
-    if (p) {
+    char *p = shared_malloc(size);
+    if (p)
+    {
         memcpy(p, s, size);
     }
     return p;
 }
 
-
 int parse_ip_range(const char *ip_range, SHARED_UINT32 *start_ip, SHARED_UINT32 *end_ip)
 {
     char *range_str = fire_strdup(ip_range);
     char *delimiter = strchr(range_str, '-');
-    
-    if (delimiter) {
+
+    if (delimiter)
+    {
         // Range specified
         *delimiter = '\0';
         char *start_str = range_str;
         char *end_str = delimiter + 1;
-        
+
         // Trim whitespace
-        while (isspace(*start_str)) start_str++;
-        while (isspace(*end_str)) end_str++;
-        
-        if (parse_ip(start_str, start_ip) < 0 || 
-            parse_ip(end_str, end_ip) < 0) {
+        while (isspace(*start_str))
+            start_str++;
+        while (isspace(*end_str))
+            end_str++;
+
+        if (parse_ip(start_str, start_ip) < 0 ||
+            parse_ip(end_str, end_ip) < 0)
+        {
             shared_free(range_str);
             return -1;
         }
-        
+
         // Validate range
-        if (ntohl(*start_ip) > ntohl(*end_ip)) {
+        if (ntohl(*start_ip) > ntohl(*end_ip))
+        {
             shared_free(range_str);
             return -1;
         }
-    } else {
+    }
+    else
+    {
         // Single IP
-        if (parse_ip(range_str, start_ip) < 0) {
+        if (parse_ip(range_str, start_ip) < 0)
+        {
             shared_free(range_str);
             return -1;
         }
         *end_ip = *start_ip;
     }
-    
+
     shared_free(range_str);
     return 0;
 }
@@ -320,42 +322,48 @@ int parse_port_range(const char *port_range, uint32_t *start_port, uint32_t *end
 {
     char *range_str = fire_strdup(port_range);
     char *delimiter = strchr(range_str, '-');
-    
-    if (delimiter) {
+
+    if (delimiter)
+    {
         // Range specified
         *delimiter = '\0';
         char *start_str = range_str;
         char *end_str = delimiter + 1;
-        
+
         // Trim whitespace
-        while (isspace(*start_str)) start_str++;
-        while (isspace(*end_str)) end_str++;
-        
+        while (isspace(*start_str))
+            start_str++;
+        while (isspace(*end_str))
+            end_str++;
+
         int start = parse_int(start_str);
         int end = parse_int(end_str);
-        
-        if (start < 0 || start > 65535 || end < 0 || end > 65535 || start > end) {
+
+        if (start < 0 || start > 65535 || end < 0 || end > 65535 || start > end)
+        {
             shared_free(range_str);
             return -1;
         }
-        
+
         *start_port = (uint32_t)start;
         *end_port = (uint32_t)end;
-    } else {
+    }
+    else
+    {
         // Single port
         int port = parse_int(range_str);
-        if (port < 0 || port > 65535) {
+        if (port < 0 || port > 65535)
+        {
             shared_free(range_str);
             return -1;
         }
         *start_port = (uint32_t)port;
         *end_port = *start_port;
     }
-    
+
     shared_free(range_str);
     return 0;
 }
-
 
 // Assuming shared_malloc and safe_strcpy are defined elsewhere
 
@@ -545,7 +553,7 @@ fire_Rule *parse_json_list(char *input, int count)
         return NULL;
     }
 
-    shared_print("Parsing completed successfully");
+    shared_print("Rule list parsing completed successfully");
     return rule_array;
 }
 
@@ -557,10 +565,12 @@ fire_Rule parse_json_to_rule(char *json_string)
 
     // Parse id
     value = extract_value(json_string, "id");
-    if (value) {
+    if (value)
+    {
         rule.id = parse_int(value);
         shared_free(value);
-        if (rule.id < 0) {
+        if (rule.id < 0)
+        {
             shared_print("error parsing id");
             return rule;
         }
@@ -568,10 +578,12 @@ fire_Rule parse_json_to_rule(char *json_string)
 
     // Parse source address ranges
     value = extract_value(json_string, "source_address_start");
-    if (value) {
+    if (value)
+    {
         parse_error = parse_ip(value, &(rule.source_address_start));
         shared_free(value);
-        if (parse_error < 0) {
+        if (parse_error < 0)
+        {
             rule.id = -1;
             shared_print("error parsing source ip start range");
             return rule;
@@ -579,10 +591,12 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     value = extract_value(json_string, "source_address_end");
-    if (value) {
+    if (value)
+    {
         parse_error = parse_ip(value, &(rule.source_address_end));
         shared_free(value);
-        if (parse_error < 0) {
+        if (parse_error < 0)
+        {
             rule.id = -1;
             shared_print("error parsing source ip end range");
             return rule;
@@ -590,7 +604,8 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     // Validate source IP range
-    if (ntohl(rule.source_address_start) > ntohl(rule.source_address_end)) {
+    if (ntohl(rule.source_address_start) > ntohl(rule.source_address_end))
+    {
         rule.id = -1;
         shared_print("error: source IP start is greater than end");
         return rule;
@@ -598,10 +613,12 @@ fire_Rule parse_json_to_rule(char *json_string)
 
     // Parse source port ranges
     value = extract_value(json_string, "source_port_start");
-    if (value) {
+    if (value)
+    {
         int port = parse_int(value);
         shared_free(value);
-        if (port < 0 || port > 65535) {
+        if (port < 0 || port > 65535)
+        {
             rule.id = -1;
             shared_print("error parsing source port start");
             return rule;
@@ -610,10 +627,12 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     value = extract_value(json_string, "source_port_end");
-    if (value) {
+    if (value)
+    {
         int port = parse_int(value);
         shared_free(value);
-        if (port < 0 || port > 65535) {
+        if (port < 0 || port > 65535)
+        {
             rule.id = -1;
             shared_print("error parsing source port end");
             return rule;
@@ -622,7 +641,8 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     // Validate source port range
-    if (rule.source_port_start > rule.source_port_end) {
+    if (rule.source_port_start > rule.source_port_end)
+    {
         rule.id = -1;
         shared_print("error: source port start is greater than end");
         return rule;
@@ -630,10 +650,12 @@ fire_Rule parse_json_to_rule(char *json_string)
 
     // Parse destination address ranges
     value = extract_value(json_string, "destination_address_start");
-    if (value) {
+    if (value)
+    {
         parse_error = parse_ip(value, &(rule.destination_address_start));
         shared_free(value);
-        if (parse_error < 0) {
+        if (parse_error < 0)
+        {
             rule.id = -1;
             shared_print("error parsing destination ip start range");
             return rule;
@@ -641,10 +663,12 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     value = extract_value(json_string, "destination_address_end");
-    if (value) {
+    if (value)
+    {
         parse_error = parse_ip(value, &(rule.destination_address_end));
         shared_free(value);
-        if (parse_error < 0) {
+        if (parse_error < 0)
+        {
             rule.id = -1;
             shared_print("error parsing destination ip end range");
             return rule;
@@ -652,7 +676,8 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     // Validate destination IP range
-    if (ntohl(rule.destination_address_start) > ntohl(rule.destination_address_end)) {
+    if (ntohl(rule.destination_address_start) > ntohl(rule.destination_address_end))
+    {
         rule.id = -1;
         shared_print("error: destination IP start is greater than end");
         return rule;
@@ -660,10 +685,12 @@ fire_Rule parse_json_to_rule(char *json_string)
 
     // Parse destination port ranges
     value = extract_value(json_string, "destination_port_start");
-    if (value) {
+    if (value)
+    {
         int port = parse_int(value);
         shared_free(value);
-        if (port < 0 || port > 65535) {
+        if (port < 0 || port > 65535)
+        {
             rule.id = -1;
             shared_print("error parsing destination port start");
             return rule;
@@ -672,10 +699,12 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     value = extract_value(json_string, "destination_port_end");
-    if (value) {
+    if (value)
+    {
         int port = parse_int(value);
         shared_free(value);
-        if (port < 0 || port > 65535) {
+        if (port < 0 || port > 65535)
+        {
             rule.id = -1;
             shared_print("error parsing destination port end");
             return rule;
@@ -684,7 +713,8 @@ fire_Rule parse_json_to_rule(char *json_string)
     }
 
     // Validate destination port range
-    if (rule.destination_port_start > rule.destination_port_end) {
+    if (rule.destination_port_start > rule.destination_port_end)
+    {
         rule.id = -1;
         shared_print("error: destination port start is greater than end");
         return rule;
@@ -693,14 +723,16 @@ fire_Rule parse_json_to_rule(char *json_string)
     // Parse protocol
     shared_print("debug,parse field - protocol");
     value = extract_value(json_string, "protocol");
-    if (value) {
+    if (value)
+    {
         if (strcmp(value, "TCP") == 0)
             rule.proto = fire_proto_TCP;
         else if (strcmp(value, "UDP") == 0)
             rule.proto = fire_proto_UDP;
         else if (strcmp(value, "ANY") == 0)
             rule.proto = fire_proto_ANY;
-        else {
+        else
+        {
             rule.id = -1;
             shared_free(value);
             shared_print("error parsing protocol");
@@ -712,12 +744,14 @@ fire_Rule parse_json_to_rule(char *json_string)
     // Parse action
     shared_print("debug,parse field - action");
     value = extract_value(json_string, "action");
-    if (value) {
+    if (value)
+    {
         if (strcmp(value, "ACCEPT") == 0)
             rule.action = fire_ACCEPT;
         else if (strcmp(value, "DROP") == 0)
             rule.action = fire_DROP;
-        else {
+        else
+        {
             rule.id = -1;
             shared_free(value);
             shared_print("error parsing action");
@@ -729,12 +763,14 @@ fire_Rule parse_json_to_rule(char *json_string)
     // Parse direction
     shared_print("debug,parse field - direction");
     value = extract_value(json_string, "direction");
-    if (value) {
+    if (value)
+    {
         if (strcmp(value, "INBOUND") == 0)
             rule.direction = fire_dir_INBOUND;
         else if (strcmp(value, "OUTBOUND") == 0)
             rule.direction = fire_dir_OUTBOUND;
-        else {
+        else
+        {
             rule.id = -1;
             shared_free(value);
             shared_print("error parsing direction");
@@ -746,27 +782,33 @@ fire_Rule parse_json_to_rule(char *json_string)
     // Parse enabled
     shared_print("debug,parse field - enabled");
     value = extract_value(json_string, "enabled");
-    if (value) {
-        shared_print("debug,parse found field enabled");
-        if (strcmp(value, "true") == 0) {
+    if (value)
+    {
+
+        while (isspace(*value))
+            value++;
+
+        if (strncmp(value, "true", 4) == 0 || strncmp(value, "True", 4) == 0 || strcmp(value, "1") == 0)
+        {
             rule.enabled = fire_TRUE;
-            shared_print("debug,parse found field enabled true");
         }
-        else if (strcmp(value, "false") == 0) {
+        else if (strncmp(value, "false", 5) == 0 || strncmp(value, "False", 5) == 0 || strcmp(value, "0") == 0)
+        {
             rule.enabled = fire_FALSE;
-            shared_print("debug,parse found field enabled false");
         }
-        else {
+        else
+        {
             rule.id = -1;
             shared_free(value);
-            shared_print("error parsing enabled");
+            shared_print("error parsing enabled, value was: %s", value);
             return rule;
         }
         shared_free(value);
     }
-    else {
-        shared_print("debug,parse DIDNT found field enabled");
-        rule.enabled = fire_TRUE;  // Default to enabled if not specified
+    else
+    {
+        shared_print("debug,parse error DIDNT found field enabled");
+        rule.enabled = fire_TRUE; // Default to enabled if not specified
     }
 
     return rule;

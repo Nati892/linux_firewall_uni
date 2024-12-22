@@ -5,8 +5,8 @@
 // Boolean type definition
 typedef enum fire_BOOL
 {
-    fire_TRUE,
-    fire_FALSE
+    fire_FALSE,
+    fire_TRUE
 } fire_BOOL;
 
 // Network protocol enum definition
