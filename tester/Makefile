@@ -1,9 +1,9 @@
 # Compiler
 CC = gcc
-
-# Compiler flags
-CFLAGS = -Wall -Werror -g
-
+# Compiler flags with PIE support
+CFLAGS = -Wall -Werror -g -fPIE
+# Linker flags
+LDFLAGS = -pie
 # Target executable name
 TARGET = tests
 
@@ -11,8 +11,8 @@ TARGET = tests
 all: $(TARGET)
 
 # Rule to link the object files and create the executable
-$(TARGET): main.o rule_tests.o ../Rule/RuleParser.o
-	$(CC) -o $(TARGET) main.o rule_tests.o ../Rule/RuleParser.o ../Head/stdafx.o
+$(TARGET): main.o rule_tests.o ../Rule/RuleParser.o ../Head/stdafx.o
+	$(CC) $(LDFLAGS) -o $(TARGET) $^
 
 # Rule to compile the main.c source file
 main.o: main.c rule_tests.h
@@ -22,10 +22,10 @@ main.o: main.c rule_tests.h
 rule_tests.o: rule_tests.c rule_tests.h stdafx.o
 	$(CC) $(CFLAGS) -c rule_tests.c
 
-RuleParser.o: ../Rule/RuleParser.o stdafx.o ../Rule/RuleParser.h ../Rule/Rule.h
+RuleParser.o: ../Rule/RuleParser.c ../Rule/RuleParser.h ../Rule/Rule.h
 	$(CC) $(CFLAGS) -c ../Rule/RuleParser.c 
 
-stdafx.o: ../Head/stdafx.o ../Head/stdafx.h ../Head/stdafx.c
+stdafx.o: ../Head/stdafx.c ../Head/stdafx.h
 	$(CC) $(CFLAGS) -c ../Head/stdafx.c
 	
 # Clean up build files

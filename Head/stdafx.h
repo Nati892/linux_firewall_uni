@@ -37,6 +37,7 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <linux/netlink.h>        // for netlink socket
+#include <arpa/inet.h>      // For ntohl and network functions
 #endif
 
 #ifdef __KERNEL__
