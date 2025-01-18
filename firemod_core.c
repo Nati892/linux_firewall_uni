@@ -145,12 +145,6 @@ unsigned int process_inbound_traffic(void *priv,
     mutex_lock(&current_running_mutex);
     for (i = 0; i < running_table_in_amount; i++)
     {
-        if (running_table_in[i].enabled == fire_FALSE)
-        {
-            shared_print("debug: rule %d not enabled ", i); // debug
-            continue;
-        }
-        shared_print("debug: rule %d is enabled ", i); // debug
         // Check protocol match
         if (running_table_in[i].proto != fire_proto_ANY)
         {
